@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/arthurobo/agentflow/internal/store"
 )
@@ -99,13 +100,25 @@ func TestPlayDoneEndsLoop(t *testing.T) {
 	for _, p := range []struct {
 		from, to *store.LoopMember
 		body     string
-	}{{orch, inv, "investigate"}, {inv, orch, "conclude"}, {orch, engineer, "here is what we found"}} {
+	}{{orch, inv, "investigate"}, {inv, orch, "conclude"}} {
 		if _, err := st.PostMail(ctx, p.from, p.to, store.MailPost{Body: p.body}); err != nil {
 			t.Fatalf("%s: %v", p.body, err)
 		}
 	}
-	if cur, _ := st.GetLoop(ctx, l.ID); cur.PlayStatus != store.PlayDone {
+	cur, _ := st.GetLoop(ctx, l.ID)
+	if cur.PlayStatus != store.PlayDone {
 		t.Fatalf("the play must be done: %+v", cur)
+	}
+	// The orchestrator's wrap-up report must land in a strictly later
+	// millisecond than PlayEndedAt: a same-millisecond tie reads as "not
+	// reported yet" (LastPostedAt > endedAt is false), and the loop would then
+	// sit out the 10-minute wrap-up grace instead of finishing. Wait for the
+	// clock to pass PlayEndedAt deterministically rather than hoping it has.
+	for time.Now().UnixMilli() <= cur.PlayEndedAt {
+		time.Sleep(time.Millisecond)
+	}
+	if _, err := st.PostMail(ctx, orch, engineer, store.MailPost{Body: "here is what we found"}); err != nil {
+		t.Fatalf("wrap-up: %v", err)
 	}
 	rec := &stopRecorder{}
 	sweepOnce(ctx, st, nil, nil, rec.stop, quietLog())

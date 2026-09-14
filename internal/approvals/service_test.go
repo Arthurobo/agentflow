@@ -169,10 +169,27 @@ func TestNoSpamOnBurst(t *testing.T) {
 			results[i], _ = svc.Resolve(ctx, params("sess-4", "run-4", "Bash", `rm -rf node_modules`))
 		}(i)
 	}
-	time.Sleep(150 * time.Millisecond) // let all land on the collapse
-	ids := pendingIDs(t, st)
-	if len(ids) != 1 {
-		t.Fatalf("expected exactly ONE pending approval (collapse), got %d", len(ids))
+	// Wait until all 20 asks have registered as waiters on the single collapsed
+	// approval before the human decides. A fixed sleep is load-sensitive: a
+	// straggler that enters Resolve after the decision (and after recent[key]
+	// is stamped) takes the cooldown branch and returns a spurious deny. This
+	// polls the real waiter count, so the decision can never race a
+	// not-yet-registered ask.
+	var ids []string
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		ids = pendingIDs(t, st)
+		if len(ids) == 1 && svc.waiterCount(ids[0]) == 20 {
+			break
+		}
+		if time.Now().After(deadline) {
+			got := -1
+			if len(ids) == 1 {
+				got = svc.waiterCount(ids[0])
+			}
+			t.Fatalf("burst did not collapse onto one approval with 20 waiters: pending=%d waiters=%d", len(ids), got)
+		}
+		time.Sleep(time.Millisecond)
 	}
 	_ = svc.Decide(ctx, ids[0], true, "device:phone-1")
 	wg.Wait()
@@ -251,6 +268,18 @@ func pendingIDs(t *testing.T, st *store.Store) []string {
 		out = append(out, a.ID)
 	}
 	return out
+}
+
+// waiterCount reports how many goroutines are currently blocked on the
+// broadcast for approval id (test-only; reads the same state under the same
+// lock the service uses).
+func (s *Service) waiterCount(id string) int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if pd, ok := s.dec[id]; ok {
+		return pd.waiters
+	}
+	return 0
 }
 
 // TestHumanDenyNotClobberedByTimeout — regression for the AFK-demo bug: a
