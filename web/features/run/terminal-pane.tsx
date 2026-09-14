@@ -590,8 +590,15 @@ export const TerminalPane = forwardRef<
         try {
           const count = Math.abs(clicks);
           const delta = clicks > 0 ? WHEEL_UNIT_PX : -WHEEL_UNIT_PX;
+          // Dispatch on the .xterm-screen child, not term.element (the .xterm
+          // root). xterm registers its mouse-report wheel listener on the
+          // screen element; a WheelEvent dispatched on the root never reaches a
+          // listener on a child (dispatch bubbles up from the target, not
+          // down), so the report — and OpenCode's scroll — never fired.
+          const wheelTarget =
+            term.element.querySelector(".xterm-screen") ?? term.element;
           for (let i = 0; i < count; i++) {
-            term.element.dispatchEvent(
+            wheelTarget.dispatchEvent(
               // The FINGER's position, not the origin.
               //
               // A WheelEvent built without coordinates carries clientX/Y = 0,
