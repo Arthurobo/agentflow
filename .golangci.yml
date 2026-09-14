@@ -1,0 +1,33 @@
+version: "2"
+
+run:
+  timeout: 5m
+
+linters:
+  # A small set that has caught real problems in this code base: unused code,
+  # unchecked errors, and exec/file-permission mistakes. Add a linter only
+  # after it has caught a real bug.
+  default: none
+  enable:
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - gosec
+  settings:
+    gosec:
+      excludes:
+        # "File inclusion via variable" fires on every read of a path the
+        # daemon owns (its database, env file, unit file). Paths that come
+        # from requests are checked by G703's taint analysis instead.
+        - G304
+  exclusions:
+    presets:
+      - std-error-handling
+    rules:
+      # Tests build fixtures with fixed permissions, temp paths and fake
+      # commands on purpose.
+      - path: _test\.go
+        linters:
+          - gosec

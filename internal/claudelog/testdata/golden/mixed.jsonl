@@ -1,0 +1,6 @@
+{"type":"mode","mode":"plan","sessionId":"gold-1"}
+{"type":"user","uuid":"u-1","promptSource":"typed","timestamp":"2026-08-01T10:00:00.000Z","sessionId":"gold-1","version":"2.1.220","cwd":"/home/user/code/proj","message":{"role":"user","content":"fix the build"}}
+{"type":"assistant","uuid":"a-1","parentUuid":"u-1","timestamp":"2026-08-01T10:00:02.100Z","sessionId":"gold-1","version":"2.1.220","cwd":"/home/user/code/proj","message":{"model":"claude-fable-5","content":[{"type":"thinking","thinking":"","signature":"SIG==="},{"type":"tool_use","id":"toolu_01T","name":"Bash","input":{"command":"go build ./..."}}],"usage":{"input_tokens":5,"output_tokens":7,"cache_read_input_tokens":10,"cache_creation_input_tokens":12}}}
+{"type":"user","uuid":"u-2","timestamp":"2026-08-01T10:00:02.500Z","sessionId":"gold-1","version":"2.1.220","cwd":"/home/user/code/proj","message":{"role":"user","content":[{"tool_use_id":"toolu_01T","type":"tool_result","content":"ok  build"}]}}
+{"type":"queue-operation","operation":"enqueue","timestamp":"2026-08-01T10:01:00.000Z","sessionId":"gold-1","content":"<task-notification>\n<task-id>t1</task-id>\n</task-notification>"}
+{"type":"mystery-future-type","sessionId":"gold-1","content":{"look":"anything"}}

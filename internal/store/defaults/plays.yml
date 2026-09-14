@@ -1,0 +1,243 @@
+# plays.yml — the shipped play catalogue.
+#
+# THIS FILE IS THE DEFAULT, and the copy of it in your data directory is
+# generated: it is rewritten from the binary on every boot and editing it
+# changes nothing. Edits belong in the override surface.
+#
+# Every play here is validated at build time by the test suite and again when
+# an override is written against it. A play whose merged form does not validate
+# is dropped from the catalogue with its error recorded; the others keep
+# working.
+plays:
+    - name: recon
+      title: Recon
+      purpose: Ask one question and get an evidence-backed answer. Nothing is changed.
+      entry: brief
+      steps:
+        - id: brief
+          actor: ORCHESTRATOR
+          note: brief the investigator
+          brief: 'Send INVESTIGATION one brief: the question to answer and where to look. Do not describe the answer you expect to get.'
+          next:
+            - to: investigate
+        - id: investigate
+          actor: INVESTIGATION
+          note: research and report
+          brief: 'Answer the question with evidence: file:line for every claim, and say plainly what you could not establish. Change nothing.'
+          next:
+            - to: conclude
+        - id: conclude
+          actor: ORCHESTRATOR
+          note: act on the findings
+          brief: 'Act on the findings: say what they change and what happens next.'
+    - name: audit
+      title: Audit
+      purpose: Ask one question, then have the answer attacked before you act on it. Nothing is changed.
+      entry: brief
+      steps:
+        - id: brief
+          actor: ORCHESTRATOR
+          note: brief the investigator
+          brief: 'Send INVESTIGATION one brief: the question to answer and where to look. Do not describe the answer you expect to get.'
+          next:
+            - to: investigate
+        - id: investigate
+          actor: INVESTIGATION
+          note: research and report
+          brief: 'Answer the question with evidence: file:line for every claim, and say plainly what you could not establish. Change nothing.'
+          next:
+            - to: route
+        - id: route
+          actor: ORCHESTRATOR
+          note: forward the findings verbatim
+          brief: Forward the investigation report to REVIEW by id, verbatim. Add nothing except the question you want ruled on.
+          next:
+            - to: review
+        - id: review
+          actor: REVIEW
+          note: attack the findings
+          brief: 'You are reviewing an INVESTIGATION. Attack the evidence: which claims are unproven, which checks could not have failed, what was never looked at.'
+          next:
+            - to: conclude
+        - id: conclude
+          actor: ORCHESTRATOR
+          note: act on the reviewed findings
+          brief: 'Act on the reviewed findings: say what survived review, what did not, and what happens next.'
+    - name: patch
+      title: Patch
+      purpose: Make a change and get it back with the build and the full test suite already run.
+      entry: brief
+      steps:
+        - id: brief
+          actor: ORCHESTRATOR
+          note: brief the implementer
+          brief: Send IMPLEMENTATION the change to make and the constraints it must not break.
+          next:
+            - to: implement
+        - id: implement
+          actor: IMPLEMENTATION
+          note: make the edits and report
+          brief: Make the edits, run the build and the FULL test suite yourself, and stop with the tree unstaged. Report per change file:line.
+          next:
+            - to: conclude
+        - id: conclude
+          actor: ORCHESTRATOR
+          note: hand back the work
+          brief: 'Hand the work back with its evidence attached: what changed, what was run, and what is left.'
+    - name: build
+      title: Build
+      purpose: Make a change and have the diff reviewed against its brief before it comes back.
+      entry: brief
+      steps:
+        - id: brief
+          actor: ORCHESTRATOR
+          note: brief the implementer
+          brief: Send IMPLEMENTATION the change to make and the constraints it must not break.
+          next:
+            - to: implement
+        - id: implement
+          actor: IMPLEMENTATION
+          note: make the edits and report
+          brief: Make the edits, run the build and the FULL test suite yourself, and stop with the tree unstaged. Report per change file:line.
+          next:
+            - to: route
+        - id: route
+          actor: ORCHESTRATOR
+          note: forward the work verbatim
+          brief: Forward the implementation report to REVIEW by id, verbatim, together with the brief it was working from.
+          next:
+            - to: review
+        - id: review
+          actor: REVIEW
+          note: review the work
+          brief: You are reviewing a DIFF against the brief that produced it. Read the changed lines, not the report about them.
+          next:
+            - to: conclude
+        - id: conclude
+          actor: ORCHESTRATOR
+          note: hand back the reviewed work
+          brief: 'Hand the reviewed work back: what the review confirmed, what it changed, and what is left.'
+    - name: deep
+      title: Deep
+      purpose: Investigate, review the findings, implement, and keep reviewing the diff until it comes back clean.
+      entry: brief
+      maxRounds: 3
+      steps:
+        - id: brief
+          actor: ORCHESTRATOR
+          note: brief the investigator
+          brief: 'Send INVESTIGATION one brief: the question to answer and where to look. Do not describe the answer you expect to get.'
+          next:
+            - to: investigate
+        - id: investigate
+          actor: INVESTIGATION
+          note: research and report
+          brief: 'Answer the question with evidence: file:line for every claim, and say plainly what you could not establish. Change nothing.'
+          next:
+            - to: route_findings
+        - id: route_findings
+          actor: ORCHESTRATOR
+          note: forward the findings verbatim
+          brief: Forward the investigation report to REVIEW by id, verbatim. Add nothing except the question you want ruled on.
+          next:
+            - to: review_findings
+        - id: review_findings
+          actor: REVIEW
+          note: attack the investigation
+          brief: 'You are reviewing an INVESTIGATION, not a diff. Nothing has been changed yet, so do not review code. Attack the evidence: which claims are unproven, which checks could not have failed, and what was never looked at.'
+          next:
+            - to: plan
+        - id: plan
+          actor: ORCHESTRATOR
+          note: plan from the reviewed findings
+          brief: Plan from the reviewed findings, not from the raw ones. Send IMPLEMENTATION the change to make and the constraints it must not break.
+          next:
+            - to: implement
+        - id: implement
+          actor: IMPLEMENTATION
+          note: make the edits, build and test, stop unstaged
+          brief: Make the edits, run the build and the FULL test suite yourself, and stop with the tree unstaged. Report per change file:line. On a later round, address the review point by point and say which you rejected and why.
+          next:
+            - to: route_work
+        - id: route_work
+          actor: ORCHESTRATOR
+          note: forward the brief and the report verbatim
+          brief: Forward the implementation report to REVIEW by id, verbatim, together with the brief it was working from. The reviewer needs both to judge it.
+          next:
+            - to: review_work
+        - id: review_work
+          actor: REVIEW
+          note: adversarial review; clean or changes
+          brief: 'You are reviewing a DIFF against the brief that produced it. Read the changed lines, not the report about them. Then state a verdict: clean, or changes with the specific defect behind each one. A verdict is required and "it depends" is not one.'
+          next:
+            - to: conclude
+              when: clean
+            - to: rework
+              when: changes
+        - id: rework
+          actor: ORCHESTRATOR
+          note: send the review back for another round
+          brief: Send the review back to IMPLEMENTATION for another round, forwarded verbatim. This is a counted round and the play will stop cycling when the cap is reached.
+          next:
+            - to: implement
+              loop: true
+        - id: conclude
+          actor: ORCHESTRATOR
+          note: the review reported clean
+          brief: The review reported clean. Hand the work back with its evidence and say what is left for the engineer to look at.
+    - name: sweep
+      title: Sweep
+      purpose: Split the ground between several investigators, then collate and review what they each found.
+      entry: brief
+      steps:
+        - id: brief
+          actor: ORCHESTRATOR
+          note: brief every investigator on its slice
+          brief: Give each investigator a slice that does not overlap the others, and say which slice is whose. Every member must be briefed before the sweep starts.
+          next:
+            - to: sweep
+              fanOut: true
+        - id: sweep
+          actor: INVESTIGATION
+          fanIn: true
+          note: each slice reports independently
+          brief: Cover your slice and only your slice. Report what you found with file:line evidence, and say plainly where your slice ends and someone else's begins.
+          next:
+            - to: collate
+        - id: collate
+          actor: ORCHESTRATOR
+          note: collate every slice
+          brief: Collate every slice into one report. Keep each slice attributable and never merge away a disagreement between two of them.
+          next:
+            - to: review
+        - id: review
+          actor: REVIEW
+          note: review the collated sweep
+          brief: 'Review the collated sweep: the gaps between slices, the contradictions between them, and any claim only one slice makes.'
+          next:
+            - to: conclude
+        - id: conclude
+          actor: ORCHESTRATOR
+          note: act on the swept findings
+          brief: 'Act on the swept findings: what the sweep established, where it is still blind, and what happens next.'
+    - name: second-opinion
+      title: Second Opinion
+      purpose: Put one decision to a reviewer and get a ruling, not a discussion.
+      entry: brief
+      steps:
+        - id: brief
+          actor: ORCHESTRATOR
+          note: put the decision to the reviewer
+          brief: 'Put the decision to REVIEW: the options, the evidence you already hold, and what you are inclined to do. Ask for a ruling, not a discussion.'
+          next:
+            - to: review
+        - id: review
+          actor: REVIEW
+          note: rule on it
+          brief: Rule on the decision. Say which option and why, or say the question is the wrong one and what the right one is.
+          next:
+            - to: conclude
+        - id: conclude
+          actor: ORCHESTRATOR
+          note: act on the ruling
+          brief: Act on the ruling and say what you are doing with it.

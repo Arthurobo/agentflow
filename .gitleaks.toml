@@ -1,0 +1,37 @@
+# gitleaks configuration: the default rules plus narrowly scoped allowlists for
+# known false positives. Each entry must match the rule, the file and the exact
+# flagged value, so a real secret added to the same file is still reported.
+# The entries name a target rule on purpose: gitleaks treats path patterns in
+# untargeted allowlists as "skip the whole file" during directory scans, even
+# with condition = "AND".
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "RFC 6455 sample Sec-WebSocket-Key nonce in a WebSocket test and the release checklist's curl example"
+targetRules = ["generic-api-key"]
+condition = "AND"
+paths = ['''(^|/)internal/agentapi/hostile_test\.go$''', '''(^|/)docs/release-checklist\.md$''']
+regexes = ['''^dGhlIHNhbXBsZSBub25jZQ==$''']
+
+[[allowlists]]
+description = "Fake parent environment in the spawn-env test (a PID next to a placeholder token)"
+targetRules = ["generic-api-key"]
+condition = "AND"
+paths = ['''(^|/)internal/spawner/env_test\.go$''']
+regexes = ['''^CLAUDE_PID=8641$''']
+
+[[allowlists]]
+description = "UI comment listing terminal keys, matched by the generic key rule"
+targetRules = ["generic-api-key"]
+condition = "AND"
+paths = ['''(^|/)web/features/run/composer-v2\.tsx$''']
+regexes = ['''^Esc/arrows/Ctrl\+C/digits$''']
+
+[[allowlists]]
+description = "Made-up pairing token in the web pairing-link parser tests"
+targetRules = ["generic-api-key"]
+condition = "AND"
+paths = ['''(^|/)web/lib/pairing\.test\.ts$''']
+regexes = ['''^3f9a1c0b7d2e4f6a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e$''']

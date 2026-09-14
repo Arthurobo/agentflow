@@ -1,0 +1,95 @@
+name: Bug report
+description: Something agentflow did, or didn't do, that it should have
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. For security vulnerabilities, don't open an
+        issue: use private reporting (see SECURITY.md).
+
+        Before pasting output or logs, remove pairing links, tokens, your
+        `ts.net` address and anything else private.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. `agentflow start`
+        2. Scan the pairing QR code with the phone
+        3. The pairing page shows "pairing token invalid or expired"
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: agentflow version
+      description: Output of `agentflow version`.
+      placeholder: "agentflow 0.5.0 (commit abc1234, built 2026-09-13T08:42:07Z)"
+    validations:
+      required: true
+  - type: textarea
+    id: doctor
+    attributes:
+      label: agentflow doctor
+      description: |
+        Output of `agentflow doctor`. It checks claude, opencode, the service,
+        the daemon and Tailscale.
+      render: text
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      description: Distribution and version, or macOS version, and CPU architecture.
+      placeholder: "Ubuntu 24.04, amd64"
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: Install method
+      options:
+        - install.sh (release binary)
+        - agentflow update
+        - make build / make install (from source)
+        - go install (no web UI)
+        - other
+    validations:
+      required: true
+  - type: dropdown
+    id: remote
+    attributes:
+      label: Remote access
+      description: AF_REMOTE and AF_REMOTE_MODE in ~/.config/agentflow/agentflow.env.
+      options:
+        - tailscale, funnel (default)
+        - tailscale, tailnet
+        - off
+        - not sure
+  - type: input
+    id: engines
+    attributes:
+      label: Engines
+      description: Output of `claude --version` and/or `opencode --version`, if relevant.
+  - type: input
+    id: client
+    attributes:
+      label: Browser and device
+      description: If the problem is in the web UI, which browser and device.
+      placeholder: "iOS 19 Safari, home-screen app"
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: |
+        Linux: `journalctl --user -u agentflow -n 200`.
+        macOS: `~/Library/Logs/agentflow/agentflow.log`.
+        Foreground: the output of `agentflow serve`.
+      render: text

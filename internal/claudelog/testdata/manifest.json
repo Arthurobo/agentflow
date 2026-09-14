@@ -1,0 +1,327 @@
+{
+  "buckets": {
+    "special-assistant-supersedes.jsonl": {
+      "category": "assistant-supersedes",
+      "count": 2
+    },
+    "special-assistant-thinking.jsonl": {
+      "category": "assistant-thinking",
+      "count": 3
+    },
+    "special-assistant-tooluse.jsonl": {
+      "category": "assistant-tooluse",
+      "count": 3
+    },
+    "special-big-line.jsonl": {
+      "category": "big-line ~2MB",
+      "count": 1
+    },
+    "special-forwarded.jsonl": {
+      "category": "forwarded",
+      "count": 3
+    },
+    "special-peer-user.jsonl": {
+      "category": "peer-user",
+      "count": 1
+    },
+    "special-queue-dequeue.jsonl": {
+      "category": "queue-dequeue",
+      "count": 1
+    },
+    "special-queue-enqueue-plaintext.jsonl": {
+      "category": "queue-enqueue-plaintext",
+      "count": 1
+    },
+    "special-queue-enqueue-task-notification.jsonl": {
+      "category": "queue-enqueue-task-notification",
+      "count": 4
+    },
+    "special-queue-enqueue.jsonl": {
+      "category": "queue-enqueue",
+      "count": 4
+    },
+    "special-queue-remove-plaintext.jsonl": {
+      "category": "queue-remove-plaintext",
+      "count": 4
+    },
+    "special-queue-remove-task-notification.jsonl": {
+      "category": "queue-remove-task-notification",
+      "count": 1
+    },
+    "special-retracted.jsonl": {
+      "category": "retracted",
+      "count": 4
+    },
+    "special-subagent.jsonl": {
+      "category": "subagent",
+      "count": 4
+    },
+    "special-system-agents_killed.jsonl": {
+      "category": "system-agents_killed",
+      "count": 1
+    },
+    "special-system-away_summary.jsonl": {
+      "category": "system-away_summary",
+      "count": 1
+    },
+    "special-system-bridge_status.jsonl": {
+      "category": "system-bridge_status",
+      "count": 1
+    },
+    "special-system-compact_boundary.jsonl": {
+      "category": "system-compact_boundary",
+      "count": 1
+    },
+    "special-system-informational.jsonl": {
+      "category": "system-informational",
+      "count": 1
+    },
+    "special-system-local_command.jsonl": {
+      "category": "system-local_command",
+      "count": 2
+    },
+    "special-system-model_consent_fallback.jsonl": {
+      "category": "system-model_consent_fallback",
+      "count": 1
+    },
+    "special-system-model_refusal_fallback.jsonl": {
+      "category": "system-model_refusal_fallback",
+      "count": 3
+    },
+    "special-system-scheduled_task_fire.jsonl": {
+      "category": "system-scheduled_task_fire",
+      "count": 1
+    },
+    "special-system-stop_hook_summary.jsonl": {
+      "category": "system-stop_hook_summary",
+      "count": 1
+    },
+    "special-system-turn_duration.jsonl": {
+      "category": "system-turn_duration",
+      "count": 2
+    },
+    "special-user-isMeta.jsonl": {
+      "category": "user-isMeta",
+      "count": 1
+    },
+    "special-user-sdk.jsonl": {
+      "category": "user-sdk",
+      "count": 1
+    },
+    "special-user-toolresult.jsonl": {
+      "category": "user-toolresult",
+      "count": 3
+    },
+    "type-agent-name.jsonl": {
+      "category": "agent-name",
+      "count": 4
+    },
+    "type-ai-title.jsonl": {
+      "category": "ai-title",
+      "count": 4
+    },
+    "type-assistant.jsonl": {
+      "category": "assistant",
+      "count": 4
+    },
+    "type-atis-latch.jsonl": {
+      "category": "atis-latch",
+      "count": 2
+    },
+    "type-attachment.jsonl": {
+      "category": "attachment",
+      "count": 4
+    },
+    "type-bridge-session.jsonl": {
+      "category": "bridge-session",
+      "count": 2
+    },
+    "type-custom-title.jsonl": {
+      "category": "custom-title",
+      "count": 4
+    },
+    "type-file-history-delta.jsonl": {
+      "category": "file-history-delta",
+      "count": 2
+    },
+    "type-file-history-snapshot.jsonl": {
+      "category": "file-history-snapshot",
+      "count": 2
+    },
+    "type-last-prompt.jsonl": {
+      "category": "last-prompt",
+      "count": 4
+    },
+    "type-mode.jsonl": {
+      "category": "mode",
+      "count": 4
+    },
+    "type-permission-mode.jsonl": {
+      "category": "permission-mode",
+      "count": 4
+    },
+    "type-pr-link.jsonl": {
+      "category": "pr-link",
+      "count": 4
+    },
+    "type-queue-operation.jsonl": {
+      "category": "queue-operation",
+      "count": 4
+    },
+    "type-system.jsonl": {
+      "category": "system",
+      "count": 4
+    },
+    "type-user.jsonl": {
+      "category": "user",
+      "count": 4
+    },
+    "version-2.1.215.jsonl": {
+      "category": "2.1.215",
+      "count": 4
+    },
+    "version-2.1.216.jsonl": {
+      "category": "2.1.216",
+      "count": 4
+    },
+    "version-2.1.217.jsonl": {
+      "category": "2.1.217",
+      "count": 4
+    },
+    "version-2.1.218.jsonl": {
+      "category": "2.1.218",
+      "count": 4
+    },
+    "version-2.1.219.jsonl": {
+      "category": "2.1.219",
+      "count": 4
+    },
+    "version-2.1.220.jsonl": {
+      "category": "2.1.220",
+      "count": 4
+    },
+    "version-2.1.221.jsonl": {
+      "category": "2.1.221",
+      "count": 4
+    },
+    "version-2.1.222.jsonl": {
+      "category": "2.1.222",
+      "count": 4
+    },
+    "version-2.1.223.jsonl": {
+      "category": "2.1.223",
+      "count": 4
+    },
+    "version-2.1.224.jsonl": {
+      "category": "2.1.224",
+      "count": 4
+    },
+    "version-2.1.225.jsonl": {
+      "category": "2.1.225",
+      "count": 4
+    },
+    "version-2.1.226.jsonl": {
+      "category": "2.1.226",
+      "count": 4
+    },
+    "version-2.1.227.jsonl": {
+      "category": "2.1.227",
+      "count": 4
+    },
+    "version-2.1.228.jsonl": {
+      "category": "2.1.228",
+      "count": 4
+    },
+    "version-2.1.229.jsonl": {
+      "category": "2.1.229",
+      "count": 4
+    },
+    "version-2.1.231.jsonl": {
+      "category": "2.1.231",
+      "count": 4
+    },
+    "version-2.1.232.jsonl": {
+      "category": "2.1.232",
+      "count": 4
+    },
+    "version-2.1.233.jsonl": {
+      "category": "2.1.233",
+      "count": 4
+    },
+    "version-2.1.234.jsonl": {
+      "category": "2.1.234",
+      "count": 4
+    },
+    "version-2.1.235.jsonl": {
+      "category": "2.1.235",
+      "count": 4
+    }
+  },
+  "counts": {
+    "special/assistant-supersedes": 2,
+    "special/assistant-thinking": 3,
+    "special/assistant-tooluse": 3,
+    "special/forwarded": 3,
+    "special/peer-user": 1,
+    "special/queue-dequeue": 1,
+    "special/queue-enqueue": 4,
+    "special/queue-enqueue-plaintext": 1,
+    "special/queue-enqueue-task-notification": 4,
+    "special/queue-remove-plaintext": 4,
+    "special/queue-remove-task-notification": 1,
+    "special/retracted": 4,
+    "special/subagent": 4,
+    "special/system-agents_killed": 1,
+    "special/system-away_summary": 1,
+    "special/system-bridge_status": 1,
+    "special/system-compact_boundary": 1,
+    "special/system-informational": 1,
+    "special/system-local_command": 2,
+    "special/system-model_consent_fallback": 1,
+    "special/system-model_refusal_fallback": 3,
+    "special/system-scheduled_task_fire": 1,
+    "special/system-stop_hook_summary": 1,
+    "special/system-turn_duration": 2,
+    "special/user-isMeta": 1,
+    "special/user-sdk": 1,
+    "special/user-toolresult": 3,
+    "type/agent-name": 4,
+    "type/ai-title": 4,
+    "type/assistant": 4,
+    "type/atis-latch": 2,
+    "type/attachment": 4,
+    "type/bridge-session": 2,
+    "type/custom-title": 4,
+    "type/file-history-delta": 2,
+    "type/file-history-snapshot": 2,
+    "type/last-prompt": 4,
+    "type/mode": 4,
+    "type/permission-mode": 4,
+    "type/pr-link": 4,
+    "type/queue-operation": 4,
+    "type/system": 4,
+    "type/user": 4,
+    "version/2.1.215": 4,
+    "version/2.1.216": 4,
+    "version/2.1.217": 4,
+    "version/2.1.218": 4,
+    "version/2.1.219": 4,
+    "version/2.1.220": 4,
+    "version/2.1.221": 4,
+    "version/2.1.222": 4,
+    "version/2.1.223": 4,
+    "version/2.1.224": 4,
+    "version/2.1.225": 4,
+    "version/2.1.226": 4,
+    "version/2.1.227": 4,
+    "version/2.1.228": 4,
+    "version/2.1.229": 4,
+    "version/2.1.231": 4,
+    "version/2.1.232": 4,
+    "version/2.1.233": 4,
+    "version/2.1.234": 4,
+    "version/2.1.235": 4
+  },
+  "domain": "myapp-fixture-v1",
+  "generated_from": "/home/user/.claude/projects"
+}

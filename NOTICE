@@ -1,0 +1,81 @@
+agentflow
+Copyright (c) agentflow contributors
+Licensed under the MIT License (see LICENSE).
+
+This product includes third-party software. The components below are
+distributed inside the agentflow binary. Each is used under its own license;
+the full license texts ship with the respective packages (the LICENSE files in
+each Go module and in each npm package).
+
+-------------------------------------------------------------------------------
+Go modules (direct dependencies, versions from go.mod)
+-------------------------------------------------------------------------------
+
+tailscale.com v1.102.4
+  BSD-3-Clause. Copyright (c) 2020 Tailscale Inc & contributors.
+  Embedded Tailscale node (tsnet). Tailscale's own third-party notices are in
+  the module's licenses/ directory.
+
+github.com/pion/webrtc/v4 v4.2.20
+github.com/pion/ice/v4 v4.4.2
+github.com/pion/logging v0.2.4
+  MIT. Copyright (c) The Pion community <https://pion.ly>.
+
+github.com/gorilla/websocket v1.5.4-0.20250319132907-e064f32e3674
+  BSD-2-Clause. Copyright (c) 2013 The Gorilla WebSocket Authors.
+
+modernc.org/sqlite v1.57.0
+  BSD-3-Clause. Copyright (c) 2017 The Sqlite Authors.
+  Contains a translation of SQLite, which is in the public domain.
+
+github.com/creack/pty v1.1.24
+  MIT. Copyright (c) 2011 Keith Rarick.
+
+github.com/fsnotify/fsnotify v1.10.1
+  BSD-3-Clause. Copyright (c) 2012 The Go Authors; Copyright (c) fsnotify
+  Authors.
+
+github.com/goccy/go-json v0.10.6
+  MIT. Copyright (c) 2020 Masaaki Goshima.
+
+gopkg.in/yaml.v3 v3.0.1
+  MIT and Apache-2.0. Copyright (c) 2006-2011 Kirill Simonov;
+  Copyright (c) 2011-2019 Canonical Ltd.
+
+github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e
+  MIT. Copyright (c) 2014 Tom Harwood.
+
+These modules pull in further (indirect) Go modules, listed in go.mod; their
+licenses ship in their module sources.
+
+-------------------------------------------------------------------------------
+Web UI (direct dependencies of web/package.json, embedded as a static export)
+-------------------------------------------------------------------------------
+
+next 16.3.1                          MIT
+react 19.2.8, react-dom 19.2.8       MIT
+@tanstack/react-query 5.101.4        MIT
+@xterm/xterm 6.0.0                   MIT
+@xterm/addon-fit 0.11.0              MIT
+@radix-ui/react-dropdown-menu 2.1.24 MIT
+@radix-ui/react-select 2.3.7         MIT
+@radix-ui/react-separator 1.1.15     MIT
+@radix-ui/react-slot 1.3.3           MIT
+@radix-ui/react-tabs 1.1.21          MIT
+@radix-ui/react-tooltip 1.2.16       MIT
+class-variance-authority 0.7.1       Apache-2.0
+clsx 2.1.1                           MIT
+jsqr 1.4.0                           Apache-2.0
+lucide-react 0.562.0                 ISC
+next-themes 0.4.6                    MIT
+tailwind-merge 3.6.0                 MIT
+tw-animate-css 1.4.0                 MIT
+zod 4.4.3                            MIT
+
+Transitive production dependencies of the web UI are MIT, Apache-2.0, ISC,
+BSD-3-Clause, 0BSD and CC-BY-4.0 (caniuse-lite data) licensed, as reported by
+`npx license-checker --production --summary` in web/. That report also lists
+sharp and @img/sharp-libvips-* (Apache-2.0 and LGPL-3.0-or-later): these are
+optional dependencies of Next.js for server-side image optimization. The web
+UI is built as a static export with images unoptimized, so they are not part of
+the embedded bundle.

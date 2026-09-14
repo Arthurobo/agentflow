@@ -1,0 +1,85 @@
+# GoReleaser configuration for agentflow releases.
+#
+# Archive names are GoReleaser's default, agentflow_<version>_<os>_<arch>.tar.gz
+# (lowercase GOOS, Go arch names). install.sh and `agentflow update` build the
+# same name, so change all three together.
+version: 2
+
+project_name: agentflow
+
+before:
+  hooks:
+    # The web UI is embedded in the binary; build it first.
+    - make web
+
+builds:
+  - id: agentflow
+    binary: agentflow
+    main: ./cmd/agentflow
+    env:
+      - CGO_ENABLED=0
+    goos: [linux, darwin]
+    goarch: [amd64, arm64]
+    goamd64: [v1]
+    mod_timestamp: "{{ .CommitTimestamp }}"
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+      - -X main.version={{ .Version }}
+      - -X main.commit={{ .ShortCommit }}
+      - -X main.buildDate={{ .CommitDate }}
+
+archives:
+  - id: default
+    formats: [tar.gz]
+    files:
+      - README.md
+      - LICENSE
+      - NOTICE
+      - CHANGELOG.md
+      - SECURITY.md
+
+checksum:
+  name_template: checksums.txt
+  algorithm: sha256
+
+# Keyless cosign signature of checksums.txt, tied to this repository's release
+# workflow through GitHub's OIDC token. Verify with:
+#   cosign verify-blob --certificate checksums.txt.pem --signature checksums.txt.sig \
+#     --certificate-identity-regexp '^https://github\.com/arthurobo/agentflow/\.github/workflows/release\.yml@refs/tags/v.*$' \
+#     --certificate-oidc-issuer https://token.actions.githubusercontent.com checksums.txt
+signs:
+  - cmd: cosign
+    artifacts: checksum
+    signature: "${artifact}.sig"
+    certificate: "${artifact}.pem"
+    args:
+      - sign-blob
+      - --yes
+      - --output-signature=${signature}
+      - --output-certificate=${certificate}
+      - ${artifact}
+
+release:
+  github:
+    owner: arthurobo
+    name: agentflow
+  prerelease: auto
+  draft: false
+  header: |
+    ## agentflow {{ .Tag }}
+
+    Release notes: [CHANGELOG.md](https://github.com/arthurobo/agentflow/blob/{{ .Tag }}/CHANGELOG.md)
+  footer: |
+    Install or upgrade:
+
+    ```sh
+    curl -fsSL https://raw.githubusercontent.com/arthurobo/agentflow/main/install.sh | sh
+    ```
+
+    Every archive is listed in `checksums.txt`, which is signed with cosign
+    (`checksums.txt.sig`, `checksums.txt.pem`).
+
+changelog:
+  disable: true

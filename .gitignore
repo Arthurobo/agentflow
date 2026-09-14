@@ -1,0 +1,24 @@
+# Build output
+/bin/
+/dist/
+/agentflow
+
+# Local development data dir (`make dev`)
+/.dev/
+/web/node_modules/
+/web/.next/
+/web/out/
+/internal/webui/dist/*
+!/internal/webui/dist/.gitkeep
+
+# Local config & data (never commit these)
+*.env
+!.env.example
+*.db
+*.db-shm
+*.db-wal
+
+# Editor / OS cruft
+.DS_Store
+*.swp
+*.tsbuildinfo

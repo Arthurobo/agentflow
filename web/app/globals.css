@@ -1,0 +1,328 @@
+@import "../node_modules/tailwindcss/index.css";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  --radius: 0.5rem;
+  --background: oklch(0.955 0.01 238);
+  --foreground: oklch(0.18 0.025 248);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.18 0.018 250);
+  --popover: oklch(0.998 0.004 95);
+  --popover-foreground: oklch(0.18 0.018 250);
+  --primary: oklch(0.5 0.17 198);
+  --primary-foreground: oklch(0.985 0.006 95);
+  --secondary: oklch(0.94 0.012 238);
+  --secondary-foreground: oklch(0.24 0.026 250);
+  --muted: oklch(0.945 0.01 238);
+  --muted-foreground: oklch(0.47 0.024 250);
+  --accent: oklch(0.91 0.04 184);
+  --accent-foreground: oklch(0.19 0.03 230);
+  --destructive: oklch(0.58 0.21 25);
+  --destructive-foreground: oklch(0.985 0.006 95);
+  --border: oklch(0.74 0.02 238);
+  --input: oklch(0.84 0.018 238);
+  --ring: oklch(0.55 0.15 205);
+  --chart-1: oklch(0.62 0.17 204);
+  --chart-2: oklch(0.68 0.14 150);
+  --chart-3: oklch(0.67 0.15 45);
+  --chart-4: oklch(0.6 0.18 12);
+  --chart-5: oklch(0.58 0.14 286);
+  --surface-raised: oklch(0.99 0.007 238);
+  --surface-sunken: oklch(0.915 0.014 240);
+  --success: oklch(0.52 0.16 150);
+  --warning: oklch(0.55 0.16 75);
+  --danger: var(--destructive);
+  --sidebar: oklch(0.975 0.006 238);
+  --sidebar-foreground: oklch(0.22 0.02 250);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: oklch(0.93 0.025 205);
+  --sidebar-accent-foreground: oklch(0.2 0.028 230);
+  --sidebar-border: oklch(0.86 0.018 238);
+  --sidebar-ring: var(--ring);
+  /* Identity colours. These were hardcoded tailwind literals that do not
+     respond to the theme: emerald-500 measures 2.51:1 as text on a light card,
+     amber-500 2.12:1, sky-500 2.74:1. Named here so a kind or an engine has
+     ONE colour and both themes get a usable one. */
+  --kind-brief: var(--primary);
+  --kind-progress: oklch(0.55 0.02 250);
+  --kind-engineer: oklch(0.52 0.15 240);
+  /* A code block is a surface, not a colour: light must not get a black slab. */
+  --panel-shadow:
+    0 1px 2px color-mix(in oklch, var(--foreground) 8%, transparent),
+    0 10px 28px color-mix(in oklch, var(--foreground) 10%, transparent);
+  --panel-inset: 0 1px 0 oklch(1 0 0 / 70%) inset;
+}
+
+.dark {
+  --background: oklch(0.16 0.022 248);
+  --foreground: oklch(0.955 0.012 238);
+  --card: oklch(0.235 0.026 248);
+  --card-foreground: oklch(0.955 0.012 238);
+  --popover: oklch(0.19 0.018 250);
+  --popover-foreground: oklch(0.955 0.012 238);
+  --primary: oklch(0.76 0.16 190);
+  --primary-foreground: oklch(0.13 0.02 245);
+  --secondary: oklch(0.235 0.034 248);
+  --secondary-foreground: oklch(0.92 0.01 238);
+  --muted: oklch(0.235 0.026 248);
+  --muted-foreground: oklch(0.72 0.026 240);
+  --accent: oklch(0.32 0.072 178);
+  --accent-foreground: oklch(0.94 0.015 210);
+  --destructive: oklch(0.67 0.2 25);
+  --destructive-foreground: oklch(0.98 0.01 25);
+  --border: oklch(1 0 0 / 22%);
+  --input: oklch(1 0 0 / 16%);
+  --ring: oklch(0.72 0.145 196);
+  --chart-1: oklch(0.72 0.145 196);
+  --chart-2: oklch(0.74 0.14 150);
+  --chart-3: oklch(0.78 0.16 75);
+  --chart-4: oklch(0.69 0.18 22);
+  --chart-5: oklch(0.68 0.16 286);
+  --surface-raised: oklch(0.3 0.03 248);
+  --surface-sunken: oklch(0.135 0.02 248);
+  --success: oklch(0.72 0.16 150);
+  --warning: oklch(0.78 0.16 75);
+  --danger: var(--destructive);
+  --sidebar: oklch(0.13 0.024 248);
+  --sidebar-foreground: oklch(0.9 0.012 238);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: oklch(0.25 0.035 205);
+  --sidebar-accent-foreground: oklch(0.95 0.012 238);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: var(--ring);
+  --kind-brief: var(--primary);
+  --kind-progress: oklch(0.72 0.02 250);
+  --kind-engineer: oklch(0.74 0.14 240);
+  --panel-shadow: 0 18px 60px color-mix(in oklch, black 45%, transparent);
+  --panel-inset: 0 1px 0 color-mix(in oklch, var(--foreground) 9%, transparent) inset;
+}
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-surface-raised: var(--surface-raised);
+  --color-surface-sunken: var(--surface-sunken);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+  --color-kind-brief: var(--kind-brief);
+  --color-kind-progress: var(--kind-progress);
+  --color-kind-engineer: var(--kind-engineer);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+    background:
+      linear-gradient(
+        180deg,
+        color-mix(in oklch, var(--background) 86%, var(--primary) 7%) 0%,
+        var(--background) 42%,
+        color-mix(in oklch, var(--background) 88%, black 12%) 100%
+      ),
+      linear-gradient(
+        90deg,
+        color-mix(in oklch, var(--primary) 10%, transparent) 0 1px,
+        transparent 1px 100%
+      ),
+      linear-gradient(
+        0deg,
+        color-mix(in oklch, var(--primary) 7%, transparent) 0 1px,
+        transparent 1px 100%
+      );
+    background-size:
+      auto,
+      56px 56px,
+      56px 56px;
+    background-attachment: fixed;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+  ::selection {
+    background: color-mix(in oklch, var(--primary) 32%, transparent);
+  }
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    ::before,
+    ::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      scroll-behavior: auto !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+@layer utilities {
+  .af-page {
+    @apply relative mx-auto w-full min-w-0 max-w-6xl overflow-x-hidden px-3 pb-24 pt-4 md:px-6 md:pb-8;
+  }
+  .af-panel {
+    position: relative;
+    border: 1px solid transparent;
+    border-radius: var(--radius);
+    background:
+      linear-gradient(
+          180deg,
+          color-mix(in oklch, var(--card) 90%, var(--primary) 5%) 0%,
+          color-mix(in oklch, var(--card) 94%, black 6%) 100%
+        )
+        padding-box,
+      linear-gradient(
+          145deg,
+          color-mix(in oklch, var(--primary) 38%, transparent),
+          color-mix(in oklch, var(--border) 74%, transparent) 32%,
+          color-mix(in oklch, var(--warning) 20%, transparent) 68%,
+          color-mix(in oklch, var(--foreground) 14%, transparent)
+        )
+        border-box;
+    box-shadow:
+      var(--panel-inset),
+      var(--panel-shadow);
+    backdrop-filter: blur(14px);
+  }
+  .af-subtle-panel {
+    border: 1px solid color-mix(in oklch, var(--border) 72%, transparent);
+    border-radius: var(--radius);
+    background: linear-gradient(
+      180deg,
+      color-mix(in oklch, var(--surface-raised) 70%, var(--primary) 4%),
+      color-mix(in oklch, var(--surface-raised) 58%, transparent)
+    );
+    box-shadow: 0 1px 0 color-mix(in oklch, var(--foreground) 7%, transparent)
+      inset;
+  }
+  .af-selected {
+    border-color: var(--primary);
+    background-color: color-mix(in oklch, var(--primary) 12%, transparent);
+    box-shadow: 0 0 0 2px var(--primary);
+  }
+  .af-unselected {
+    opacity: 0.85;
+  }
+  .af-unselected:hover {
+    opacity: 1;
+    border-color: color-mix(in oklch, var(--primary) 35%, transparent);
+  }
+  .af-label {
+    @apply text-muted-foreground text-[11px] font-semibold uppercase tracking-[0.16em];
+  }
+  .af-mono {
+    @apply font-mono tabular-nums;
+  }
+  .af-reader {
+    @apply text-[15px] leading-7 md:text-base md:leading-8;
+  }
+  .overflow-wrap-anywhere {
+    overflow-wrap: anywhere;
+  }
+  .af-no-scrollbar {
+    scrollbar-width: none;
+  }
+  .af-no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .af-dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 9999px;
+    background: currentColor;
+    animation: af-bounce 1.2s infinite ease-in-out;
+  }
+  .af-dot:nth-child(2) {
+    animation-delay: 0.15s;
+  }
+  .af-dot:nth-child(3) {
+    animation-delay: 0.3s;
+  }
+  .af-modal-overlay {
+    background: color-mix(in oklch, black 55%, transparent);
+    animation: af-fade-in 160ms ease-out;
+  }
+  .dark .af-modal-overlay {
+    background: linear-gradient(
+      180deg,
+      color-mix(in oklch, black 62%, var(--primary) 9%),
+      black 76%
+    );
+  }
+  .af-modal-card {
+    animation: af-sheet-in 220ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  @media (min-width: 640px) {
+    .af-modal-card {
+      animation: af-card-in 200ms cubic-bezier(0.16, 1, 0.3, 1);
+    }
+  }
+  @keyframes af-fade-in {
+    from {
+      opacity: 0;
+    }
+  }
+  @keyframes af-drawer-in {
+    from {
+      transform: translateX(100%);
+    }
+  }
+  @keyframes af-sheet-in {
+    from {
+      opacity: 0.4;
+      transform: translateY(10%);
+    }
+  }
+  @keyframes af-card-in {
+    from {
+      opacity: 0.4;
+      transform: translateY(12px) scale(0.98);
+    }
+  }
+  @keyframes af-bounce {
+    0%,
+    80%,
+    100% {
+      transform: translateY(0);
+      opacity: 0.35;
+    }
+    40% {
+      transform: translateY(-4px);
+      opacity: 1;
+    }
+  }
+}
