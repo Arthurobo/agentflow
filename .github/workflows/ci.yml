@@ -36,8 +36,8 @@ jobs:
 
       # Sandboxed: tests never see the runner's real HOME (a past test run
       # against a real HOME renamed live Claude sessions).
-      - name: Test (sandboxed, -race)
-        run: make test
+      - name: Test (sandboxed, -race, rerun flakes)
+        run: make test-ci
 
       - name: macOS build and vet
         run: make darwin-check

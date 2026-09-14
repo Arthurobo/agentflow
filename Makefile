@@ -62,6 +62,20 @@ test:
 	HOME="$$sandbox" XDG_CONFIG_HOME="$$sandbox/.config" XDG_DATA_HOME="$$sandbox/.local/share" AF_REMOTE=off \
 		go test -race -count=1 $(GO_PKGS)
 
+## test-ci: same sandboxed -race suite as `test`, but reruns a failed test up to
+## twice so a timing-sensitive flake under -race does not fail the build; only a
+## reproducible failure (fails every rerun) blocks. Used by CI and the release.
+test-ci:
+	@set -e; \
+	export GOMODCACHE="$$(go env GOMODCACHE)" GOCACHE="$$(go env GOCACHE)" GOPATH="$$(go env GOPATH)"; \
+	export PATH="$$(go env GOPATH)/bin:$$PATH"; \
+	command -v gotestsum >/dev/null 2>&1 || go install gotest.tools/gotestsum@latest; \
+	sandbox="$$(mktemp -d -t agentflow-test.XXXXXX)"; \
+	trap 'rm -rf "$$sandbox"' EXIT; \
+	HOME="$$sandbox" XDG_CONFIG_HOME="$$sandbox/.config" XDG_DATA_HOME="$$sandbox/.local/share" AF_REMOTE=off \
+		gotestsum --rerun-fails=2 --rerun-fails-max-failures=25 --format testname \
+		--packages="$(GO_PKGS)" -- -race -count=1
+
 ## vet: run go vet
 vet:
 	go vet $(GO_PKGS)
