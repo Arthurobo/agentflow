@@ -157,7 +157,7 @@ func (u *uninstaller) run(ctx context.Context, purge, yes bool) error {
 	}
 
 	if !purge {
-		fmt.Fprintf(u.out, "Your data is still in %s. Run `agentflow uninstall --purge` from a reinstalled binary to delete it.\n", u.cfg.dataDir)
+		fmt.Fprintf(u.out, "Kept your data in %s (--keep-data). Run `agentflow uninstall` to erase it too.\n", u.cfg.dataDir)
 		u.leftovers()
 		return nil
 	}

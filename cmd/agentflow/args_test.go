@@ -41,6 +41,8 @@ func TestParseCommand(t *testing.T) {
 		{argv: []string{"uninstall", "--purge"}, want: invocation{Name: "uninstall", Purge: true}},
 		{argv: []string{"uninstall", "--yes", "--purge"}, want: invocation{Name: "uninstall", Purge: true, Yes: true}},
 		{argv: []string{"uninstall", "--purge=false", "--yes"}, want: invocation{Name: "uninstall", Yes: true}},
+		{argv: []string{"uninstall", "--keep-data"}, want: invocation{Name: "uninstall", KeepData: true}},
+		{argv: []string{"uninstall", "--keep-data", "--yes"}, want: invocation{Name: "uninstall", KeepData: true, Yes: true}},
 		{argv: []string{"uninstall", "now"}, wantErr: true},
 		{argv: []string{"revoke", "dev-1"}, want: invocation{Name: "revoke", Target: "dev-1"}},
 		{argv: []string{"revoke"}, wantErr: true},

@@ -140,7 +140,9 @@ func run(argv []string) int {
 	case "update":
 		return runUpdate()
 	case "uninstall":
-		return runUninstall(cfg, inv.Purge, inv.Yes)
+		// Erasing data is the default; --keep-data opts out. --purge is still
+		// accepted (and forces erase) for anyone who scripted it.
+		return runUninstall(cfg, inv.Purge || !inv.KeepData, inv.Yes)
 	case "pair":
 		return runPair(cfg)
 	case "devices":

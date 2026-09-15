@@ -5,7 +5,17 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.5.0] — first open-source release (unreleased)
+## [0.5.1]
+
+### Changed
+
+- **`agentflow uninstall` now erases everything by default** — the service, the
+  binary, all data and settings, and it logs agentflow's own Tailscale node out.
+  Pass `--keep-data` to keep your data and settings for a reinstall. Previously
+  uninstall kept data unless you added `--purge`, and because it deleted the
+  binary first, a follow-up `--purge` could not run. `--purge` is still accepted.
+
+## [0.5.0] — first open-source release
 
 ### Added
 

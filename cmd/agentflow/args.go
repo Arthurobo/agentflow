@@ -26,9 +26,10 @@ USAGE
   agentflow status         service, health, engines and remote access
   agentflow doctor         check engines, the service and remote access
   agentflow update         install the latest release and restart
-  agentflow uninstall [--purge] [--yes]
-                           remove the service and binary; --purge also deletes
-                           agentflow's data and settings
+  agentflow uninstall [--keep-data] [--yes]
+                           remove the service, binary, and ALL data and
+                           settings (logs out agentflow's Tailscale node too);
+                           --keep-data keeps your data for a reinstall
   agentflow version        build information
 
   agentflow pair           one-time link and QR code to pair a phone
@@ -74,8 +75,9 @@ type invocation struct {
 	DB   string
 
 	// uninstall
-	Purge bool
-	Yes   bool
+	Purge    bool
+	KeepData bool
+	Yes      bool
 
 	// start
 	Email   string
@@ -118,7 +120,11 @@ func parseCommand(argv []string, env func(string) string) (invocation, error) {
 		fs.StringVar(&inv.Addr, "addr", orDefault(env("AF_ADDR"), defaultAddr), "local listen address")
 		fs.StringVar(&inv.DB, "db", env("AF_DB"), "SQLite database path")
 	case "uninstall":
-		fs.BoolVar(&inv.Purge, "purge", false, "also delete data and settings")
+		// --purge is the old opt-in to erasing data; erasing is now the
+		// default, so it is accepted but no longer needed. --keep-data is the
+		// new opt-out.
+		fs.BoolVar(&inv.Purge, "purge", false, "deprecated: erasing data is now the default")
+		fs.BoolVar(&inv.KeepData, "keep-data", false, "keep data and settings for a reinstall")
 		fs.BoolVar(&inv.Yes, "yes", false, "don't ask for confirmation")
 	case "start":
 		fs.StringVar(&inv.Email, "email", "", "email for this machine's link")
