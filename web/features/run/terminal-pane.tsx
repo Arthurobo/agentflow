@@ -362,17 +362,9 @@ export const TerminalPane = forwardRef<
         ws.send(JSON.stringify({ type: "resize", ...next }));
       };
 
-      // During a touch-burst the bridge coalesces everything the synthetic wheel
-      // events produce into ONE input frame (onTouchMove below).
-      let batchingInput = false;
-      let batchedInput = "";
       term.onData((data) => {
         const ws = wsRef.current;
         if (!ws || ws.readyState !== WebSocket.OPEN) return;
-        if (batchingInput) {
-          batchedInput += data;
-          return;
-        }
         ws.send(JSON.stringify({ type: "input", data }));
       });
 
@@ -521,29 +513,28 @@ export const TerminalPane = forwardRef<
       };
       forceReconnectRef.current = forceReconnect;
 
-      // ---- mobile touch → wheel bridge (alt buffer only) -------------------
+      // ---- mobile touch → scroll bridge (alt buffer only) ------------------
       // Normal scrollback is fully native: touch-action: pan-y lets the
       // browser pan .xterm-viewport, which drives xterm's own wheel handler
       // and calls scrollLines() for us. We never intercept it.
       //
-      // The alt buffer (TUI) is a fixed grid that doesn't scroll visually,
-      // so a finger pan produces zero native wheel events and the TUI's
-      // mouse-report scroll never fires. We bridge it here: a passive
-      // touchmove (we do not preventDefault — the host's touch-action is
-      // pan-y and the browser keeps doing its thing) reads the cell size
-      // on demand, and dispatches a synthetic wheel for every whole cell
-      // the finger has crossed since the last sample. No accumulator
-      // floor, no fling, no quantization cap: the very first cell of
-      // movement fires a wheel event, so drags feel 1:1 instead of having
-      // the ~50px dead zone the old accumulator had. isTrusted guards
-      // against any browser that ever re-emits a touch as a wheel.
-      const WHEEL_UNIT_PX = 53; // > xterm's 50px small-delta damping floor
-      const cellPxRef = () => {
-        const el = term?.element;
-        if (!el || !term || term.rows <= 0) return 0;
-        const px = el.getBoundingClientRect().height / term.rows;
-        return px >= 8 ? px : 0;
-      };
+      // The alt buffer (TUI, e.g. OpenCode) is a fixed grid that doesn't
+      // scroll visually, so a finger pan produces zero native wheel events and
+      // the TUI never scrolls. We bridge it by translating the pan into the
+      // SGR mouse-wheel escape the TUI already listens for and writing it
+      // straight to the PTY.
+      //
+      // Why not synthesize a DOM WheelEvent and let xterm encode it? xterm 6
+      // gates wheel→mouse-report behind consumeWheelEvent(), a pixel→line
+      // accumulator that needs the live render dimensions + dpr and dampens
+      // sub-50px deltas; a synthetic wheel (always deltaMode=PIXEL) slips
+      // through it unreliably, so the report often never fired. Emitting the
+      // escape ourselves is deterministic. OpenCode negotiates SGR mouse mode
+      // (DECSET 1006 alongside 1000/1002/1003), so the sequence is
+      // `ESC [ < btn ; col ; row M`: btn 64 = wheel up, 65 = wheel down, with
+      // col/row 1-based under the finger. A report at the 1;1 corner is
+      // ignored by the TUI, so we clamp into the real grid. isTrusted guards
+      // against any browser that re-emits a touch as a wheel.
       const lastTouchY = new Map<number, number>();
       let altTouchAcc = 0;
       // ---- tap-to-type -------------------------------------------------
@@ -568,8 +559,11 @@ export const TerminalPane = forwardRef<
         const t = ev.touches[0];
         if (!t || !term?.element) return;
         if (term.buffer.active.type !== "alternate") return; // normal buf is native
-        const px = cellPxRef();
-        if (px < 8) return; // not fitted yet
+        if (term.rows <= 0 || term.cols <= 0) return;
+        const rect = term.element.getBoundingClientRect();
+        const cellH = rect.height / term.rows;
+        const cellW = rect.width / term.cols;
+        if (cellH < 8 || cellW < 4) return; // not fitted yet
         const prev = lastTouchY.get(t.identifier);
         if (prev === undefined) {
           lastTouchY.set(t.identifier, t.clientY);
@@ -580,54 +574,29 @@ export const TerminalPane = forwardRef<
         if (dy === 0) return;
         // signed accumulator so a direction flip must pay back the
         // sub-cell remainder instead of getting a free click.
-        altTouchAcc += dy / px;
+        altTouchAcc += dy / cellH;
         const clicks = Math.trunc(altTouchAcc);
         if (clicks === 0) return;
         tapScrolled = true; // the gesture moved the TUI: not a tap
         altTouchAcc -= clicks;
-        batchingInput = true;
-        batchedInput = "";
-        try {
-          const count = Math.abs(clicks);
-          const delta = clicks > 0 ? WHEEL_UNIT_PX : -WHEEL_UNIT_PX;
-          // Dispatch on the .xterm-screen child, not term.element (the .xterm
-          // root). xterm registers its mouse-report wheel listener on the
-          // screen element; a WheelEvent dispatched on the root never reaches a
-          // listener on a child (dispatch bubbles up from the target, not
-          // down), so the report — and OpenCode's scroll — never fired.
-          const wheelTarget =
-            term.element.querySelector(".xterm-screen") ?? term.element;
-          for (let i = 0; i < count; i++) {
-            wheelTarget.dispatchEvent(
-              // The FINGER's position, not the origin.
-              //
-              // A WheelEvent built without coordinates carries clientX/Y = 0,
-              // and xterm does not reject that — it CLAMPS it into the grid
-              // and emits a mouse report at cell 1;1. Measured against
-              // OpenCode 1.18.29 under a real PTY: a wheel report at 1;1
-              // produces zero response, while the identical report at 10;10
-              // or 50;15 scrolls the transcript. So every finger-scroll was
-              // being delivered to the one corner the TUI ignores.
-              //
-              // Claude never showed it because it does not use the alt
-              // screen, so this bridge is skipped for it entirely and its
-              // scrolling is the browser's own.
-              new WheelEvent("wheel", {
-                deltaY: delta,
-                cancelable: true,
-                clientX: t.clientX,
-                clientY: t.clientY,
-                screenX: t.screenX,
-                screenY: t.screenY,
-              }),
-            );
-          }
-        } finally {
-          batchingInput = false;
-        }
+        // The cell under the finger, 1-based and clamped into the grid.
+        const col = Math.min(
+          term.cols,
+          Math.max(1, Math.floor((t.clientX - rect.left) / cellW) + 1),
+        );
+        const row = Math.min(
+          term.rows,
+          Math.max(1, Math.floor((t.clientY - rect.top) / cellH) + 1),
+        );
+        // dy < 0 (finger dragged down) reveals older content = wheel up (64);
+        // dy > 0 (finger dragged up) = wheel down (65). clicks carries the sign.
+        const btn = clicks < 0 ? 64 : 65;
+        const count = Math.abs(clicks);
+        let seq = "";
+        for (let i = 0; i < count; i++) seq += `\x1b[<${btn};${col};${row}M`;
         const ws = wsRef.current;
-        if (batchedInput && ws && ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({ type: "input", data: batchedInput }));
+        if (seq && ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: "input", data: seq }));
         }
       };
       const onTouchEnd = (ev: TouchEvent) => {
