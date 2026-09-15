@@ -16,6 +16,12 @@ unless you changed `AF_ADDR` or `AF_DB`.
 - [ ] `CHANGELOG.md` has the version and date; README and `docs/` match any
       changed commands, settings or paths; `.env.example` matches
       `defaultEnvFile` (`make test` fails otherwise).
+- [ ] The pinned `cloudflared` is current: compare `Version` in
+      `internal/remote/cloudflared/install.go` with the latest
+      [release](https://github.com/cloudflare/cloudflared/releases); to move,
+      follow the steps in that file's comment (asset and extracted-binary
+      SHA-256 for all four platforms, `/ready`, the log lines and
+      `TUNNEL_TOKEN` still work).
 - [ ] `make release-snapshot` succeeds. In `dist/` there are four archives named
       `agentflow_<version>_{linux,darwin}_{amd64,arm64}.tar.gz` and a
       `checksums.txt`. Each archive contains `agentflow`, `README.md`,
@@ -190,6 +196,16 @@ tailnet, with the system Tailscale and with the embedded node:
       429 `locked_out`
 
 ## 7. Remote modes
+
+- [ ] Cloudflare default, fresh spare account (no `AF_REMOTE`, no Tailscale
+      state): `agentflow start` needs no sign-in step, prints
+      `Remote URL: https://<adjective>-<noun>-<4 digits>.useagentflow.xyz (Cloudflare)`,
+      and a phone pairs and opens a terminal through it. `ps` shows no token
+      on `cloudflared`'s command line; `cloudflare-tunnel.json` is mode `0600`;
+      without `CF-Connecting-IP`, `curl -si http://127.0.0.1:4345/` → 421.
+      `agentflow restart` keeps the same URL and pairing; with `AF_CLOUD_URL`
+      pointed at an unreachable address, a restart still comes up on the saved
+      tunnel.
 
 - [ ] `AF_REMOTE_MODE=tailnet` in the env file, `agentflow restart`: the URL does
       not load from a device outside the tailnet, and loads from a phone with the

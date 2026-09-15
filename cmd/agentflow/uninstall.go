@@ -12,7 +12,9 @@ import (
 	"time"
 
 	"github.com/arthurobo/agentflow/internal/adminsock"
+	"github.com/arthurobo/agentflow/internal/cloud"
 	"github.com/arthurobo/agentflow/internal/remote"
+	"github.com/arthurobo/agentflow/internal/remote/cloudflared"
 	"github.com/arthurobo/agentflow/internal/store"
 	"github.com/arthurobo/agentflow/internal/uploads"
 )
@@ -85,6 +87,8 @@ func (u *uninstaller) purgeFiles() []string {
 		filepath.Join(u.cfg.dataDir, "account.json"),
 		filepath.Join(u.cfg.dataDir, "machine-id"),
 		filepath.Join(u.cfg.dataDir, remote.ServeRecordName),
+		filepath.Join(u.cfg.dataDir, cloud.TunnelFileName),
+		cloudflared.NewInstaller(u.cfg.dataDir).Path(),
 		adminsock.SocketPath(u.cfg.dataDir),
 	}
 	// The reference copy of the built-in defaults, file by file.
@@ -202,6 +206,7 @@ func (u *uninstaller) purge() {
 	// Directories are only removed when empty.
 	for _, d := range []string{
 		adminsock.Dir(u.cfg.dataDir),
+		filepath.Dir(cloudflared.NewInstaller(u.cfg.dataDir).Path()),
 		u.defaultsDir(),
 		u.cfg.dataDir,
 		filepath.Dir(u.envFile),

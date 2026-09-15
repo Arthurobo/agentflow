@@ -48,15 +48,17 @@ USAGE
 
 CONFIG
   ~/.config/agentflow/agentflow.env   settings (AF_REMOTE, AF_ADDR, ...)
-  ~/.local/share/agentflow/           database, uploads, Tailscale state
+  ~/.local/share/agentflow/           database, uploads, tunnel and Tailscale state
 
 REMOTE ACCESS
-  AF_REMOTE=tailscale (the default) serves an https://<machine>.<tailnet>.ts.net
-  URL through the Tailscale on this computer, or agentflow's own node with
-  AF_TAILSCALE=embedded; the phone needs no app (Tailscale Funnel), and
-  AF_REMOTE_MODE=tailnet keeps it private to your tailnet. Only paired devices
-  get past the pairing page. AF_REMOTE=off (agentflow remote off) disables
-  remote access.
+  AF_REMOTE=cloudflare (the default) serves a stable
+  https://<name>.useagentflow.xyz URL through a Cloudflare tunnel the agentflow
+  account service sets up for this machine; nothing to install or sign in to.
+  AF_REMOTE=tailscale serves an https://<machine>.<tailnet>.ts.net URL through
+  the Tailscale on this computer, or agentflow's own node with
+  AF_TAILSCALE=embedded (AF_REMOTE_MODE=tailnet keeps it private to your
+  tailnet). Only paired devices get past the pairing page. AF_REMOTE=off
+  (agentflow remote off) disables remote access.
 `
 
 // errUsage marks a command line that doesn't parse; the caller prints usage

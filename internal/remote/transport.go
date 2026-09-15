@@ -16,30 +16,43 @@ import (
 	"tailscale.com/client/local"
 )
 
-// A transport puts the daemon's public root on the internet. The Tailscale
-// implementations (system and embedded) and Off implement Transport, publish
-// the same Status vocabulary, and serve the public root on a listener of
-// their own: never on the local listener, which answers only this computer
-// and trusts it accordingly.
+// A transport puts the daemon's public root on the internet. The Cloudflare
+// named tunnel, the Tailscale implementations (system and embedded) and Off
+// implement Transport, publish the same Status vocabulary (Status.Transport
+// says which one it is), and serve the public root on a listener of their
+// own: never on the local listener, which answers only this computer and
+// trusts it accordingly.
 
-// TransportTailscale is the only transport: Tailscale, through the system
-// installation or agentflow's embedded node.
-const TransportTailscale = "tailscale"
+// Transport names.
+const (
+	// TransportCloudflare is a Cloudflare named tunnel provisioned by the
+	// agentflow account service: the default.
+	TransportCloudflare = "cloudflare"
+	// TransportTailscale is Tailscale, through the system installation or
+	// agentflow's embedded node.
+	TransportTailscale = "tailscale"
+)
 
 // TransportLabel is the name a person knows a transport by.
 func TransportLabel(transport string) string {
-	if transport == TransportTailscale {
+	switch transport {
+	case TransportCloudflare:
+		return "Cloudflare"
+	case TransportTailscale:
 		return "Tailscale"
+	default:
+		return "remote access"
 	}
-	return "remote access"
 }
 
 // SelectConfig chooses and configures a transport.
 type SelectConfig struct {
-	// Transport is TransportTailscale, or "" for off.
+	// Transport is TransportCloudflare, TransportTailscale, or "" for off.
 	Transport string
 	// Tailscale configures the tailscale transport.
 	Tailscale Config
+	// Cloudflare configures the cloudflare transport.
+	Cloudflare CloudflareConfig
 }
 
 // ErrUnknownTransport is returned by Select for a name it doesn't know.
@@ -50,6 +63,11 @@ func Select(cfg SelectConfig) (Transport, error) {
 	switch cfg.Transport {
 	case "":
 		return Off{}, nil
+	case TransportCloudflare:
+		if cfg.Cloudflare.Fetch == nil {
+			return nil, errors.New("cloudflare transport: no account service to get the tunnel from")
+		}
+		return NewCloudflare(cfg.Cloudflare), nil
 	case TransportTailscale:
 		if cfg.Tailscale.Embedded || useEmbeddedFallback(cfg.Tailscale, exec.LookPath, systemTailscaleAnswers, fallbackProbeWait) {
 			return New(cfg.Tailscale), nil
@@ -109,8 +127,8 @@ func systemTailscaleAnswers(ctx context.Context) error {
 	return err
 }
 
-// ListenTunnel opens the loopback listener a local tunnel process (tailscaled)
-// forwards public requests to. It refuses anything that could
+// ListenTunnel opens the loopback listener a local tunnel process (tailscaled,
+// cloudflared) forwards public requests to. It refuses anything that could
 // be the local listener or reachable from another machine: the public root
 // behind it trusts forwarding headers that only the tunnel may set.
 func ListenTunnel(addr, localAddr string) (net.Listener, error) {

@@ -6,10 +6,14 @@
 # Downloads the release archive for this OS and CPU, verifies it against the
 # release's checksums.txt (and, when cosign is installed, verifies the
 # signature on checksums.txt), installs the binary to ~/.local/bin/agentflow
-# and runs `agentflow start`, which sets up the background service, Tailscale
-# sign-in and phone pairing.
+# and runs `agentflow start`, which sets up the background service, this
+# machine's remote address and phone pairing.
 #
-# No Go toolchain is needed and nothing is registered anywhere.
+# No Go toolchain is needed. This script registers nothing: the agentflow
+# daemon itself asks the account service for this machine's Cloudflare tunnel
+# (https://<name>.useagentflow.xyz) when it starts, sending a random machine id,
+# the hostname and a secret it keeps. Set AF_REMOTE=tailscale (or off) in
+# ~/.config/agentflow/agentflow.env to use Tailscale instead.
 #
 # Environment:
 #   AGENTFLOW_VERSION       release tag to install, e.g. v0.6.0 (default: latest)

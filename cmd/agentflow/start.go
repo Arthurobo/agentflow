@@ -19,10 +19,10 @@ import (
 )
 
 // startFlow is `agentflow start`: offer the optional email sign-in, install
-// and start the service, wait for the daemon, walk the person through
-// whatever Tailscale needs (install, sign-in, permission, approval), wait
-// until the public URL answers, then pair a phone and watch for access
-// requests.
+// and start the service, wait for the daemon, follow remote access as it comes
+// up (the Cloudflare tunnel needs nothing from the person; Tailscale may need
+// an install, sign-in, permission or approval), wait until the public URL
+// answers, then pair a phone and watch for access requests.
 type startFlow struct {
 	in  io.Reader
 	out io.Writer
@@ -327,6 +327,9 @@ func describeRemote(w io.Writer, st remote.Status, showLink func(link string)) {
 		fmt.Fprintf(w, "Remote access hit a problem and will retry: %s\n", st.Error)
 	case remote.StateRunning:
 		fmt.Fprintf(w, "Remote URL: %s (%s)\n", st.PublicURL, transportDetail(st))
+		if st.Transport == remote.TransportCloudflare {
+			fmt.Fprintln(w, "Traffic to this address passes through Cloudflare, which can see it; only paired devices get past the pairing page.")
+		}
 	default:
 		fmt.Fprintf(w, "Remote access: %s\n", st.State)
 	}

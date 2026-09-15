@@ -178,7 +178,7 @@ func remoteCommand(ctx context.Context, w io.Writer, cfg config, c *adminsock.Cl
 		fmt.Fprintf(w, "The machine is still listed in your tailnet; remove it at %s if you want it gone.\n", remote.MachineAuthURL)
 		return nil
 	case "on", "off":
-		value := "tailscale"
+		value := defaultTransport(cfg.dataDir)
 		if verb == "off" {
 			value = "off"
 		}

@@ -176,7 +176,7 @@ func TestDefaultEnvFileListsEveryVariable(t *testing.T) {
 	if len(missing) > 0 {
 		t.Fatalf("variables missing from defaultEnvFile: %v", missing)
 	}
-	for _, line := range []string{"# AF_REMOTE=tailscale\n", "# AF_REMOTE_MODE=funnel\n", "# AF_TS_LOGS=off\n", "# AF_ADDR=127.0.0.1:4344\n"} {
+	for _, line := range []string{"# AF_REMOTE=cloudflare\n", "# AF_REMOTE_MODE=funnel\n", "# AF_TS_LOGS=off\n", "# AF_ADDR=127.0.0.1:4344\n"} {
 		if !strings.Contains(defaultEnvFile, line) {
 			t.Errorf("defaultEnvFile lacks %q", line)
 		}

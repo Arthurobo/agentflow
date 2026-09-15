@@ -1,15 +1,17 @@
-// Package remote makes the daemon reachable from a phone through Tailscale.
+// Package remote makes the daemon reachable from a phone.
 //
-// AF_REMOTE=tailscale (the default) publishes the public handler through the
-// Tailscale installed on this computer (system.go) or, with
-// AF_TAILSCALE=embedded, through agentflow's own tsnet node (tsnet.go): on a
-// Funnel listener (a public HTTPS URL that also accepts tailnet peers) or,
-// with AF_REMOTE_MODE=tailnet, tailnet-only. AF_REMOTE=off disables remote
-// access entirely.
+// AF_REMOTE=cloudflare (the default) publishes the public handler through a
+// Cloudflare named tunnel the agentflow account service provisions for this
+// machine, at https://<slug>.useagentflow.xyz (cloudflare.go).
+// AF_REMOTE=tailscale publishes it through the Tailscale installed on this
+// computer (system.go) or, with AF_TAILSCALE=embedded, through agentflow's
+// own tsnet node (tsnet.go): on a Funnel listener (a public HTTPS URL that
+// also accepts tailnet peers) or, with AF_REMOTE_MODE=tailnet, tailnet-only.
+// AF_REMOTE=off disables remote access entirely.
 //
-// Both sit behind the Transport interface so the daemon, the admin socket and
-// the CLI treat them alike and can be tested with Fake, without a Tailscale
-// account.
+// All of them sit behind the Transport interface so the daemon, the admin
+// socket and the CLI treat them alike and can be tested with Fake, without a
+// Tailscale or Cloudflare account.
 package remote
 
 import (
@@ -80,7 +82,7 @@ const (
 // Status is the snapshot the CLI and the admin socket read.
 type Status struct {
 	State State `json:"state"`
-	// Transport is TransportTailscale; empty when off.
+	// Transport is TransportCloudflare or TransportTailscale; empty when off.
 	Transport  string    `json:"transport,omitempty"`
 	Mode       Mode      `json:"mode,omitempty"`       // tailscale only
 	Backend    string    `json:"backend,omitempty"`    // tailscale only: system or embedded

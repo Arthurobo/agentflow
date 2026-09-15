@@ -612,7 +612,7 @@ func TestRemoteCommands(t *testing.T) {
 		t.Fatal(err)
 	}
 	data, _ = os.ReadFile(envFile)
-	if strings.Count(string(data), "\nAF_REMOTE=") != 1 || !strings.Contains(string(data), "\nAF_REMOTE=tailscale\n") || svc.restarts != 2 {
+	if strings.Count(string(data), "\nAF_REMOTE=") != 1 || !strings.Contains(string(data), "\nAF_REMOTE=cloudflare\n") || svc.restarts != 2 {
 		t.Fatalf("restarts=%d env:\n%s", svc.restarts, data)
 	}
 }
@@ -645,6 +645,39 @@ func TestRemoteDoctorCheck(t *testing.T) {
 	}
 }
 
+// A machine set up with Tailscale before Cloudflare became the default keeps
+// Tailscale while AF_REMOTE is unset; an explicit setting always wins.
+func TestLoadConfigKeepsTailscaleForEarlierSetups(t *testing.T) {
+	for name, file := range map[string]string{
+		"embedded node":  filepath.Join("tailscale", "tailscaled.state"),
+		"system serve":   remote.ServeRecordName,
+		"nothing before": "",
+	} {
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			want := remote.TransportCloudflare
+			if file != "" {
+				want = remote.TransportTailscale
+				if err := os.MkdirAll(filepath.Dir(filepath.Join(dir, file)), 0o700); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(filepath.Join(dir, file), []byte("x"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			env := map[string]string{"AF_DB": filepath.Join(dir, "af.db")}
+			cfg, err := loadConfig(invocation{Name: "pair"}, func(k string) string { return env[k] })
+			if err != nil || cfg.remoteMode != want {
+				t.Fatalf("remoteMode = %q, %v; want %q", cfg.remoteMode, err, want)
+			}
+			env["AF_REMOTE"] = "cloudflare"
+			if cfg, _ = loadConfig(invocation{Name: "pair"}, func(k string) string { return env[k] }); cfg.remoteMode != "cloudflare" {
+				t.Fatalf("explicit AF_REMOTE=cloudflare ignored: %q", cfg.remoteMode)
+			}
+		})
+	}
+}
+
 func TestLoadConfigDefaults(t *testing.T) {
 	env := map[string]string{"AF_DB": "/data/af.db"}
 	get := func(k string) string { return env[k] }
@@ -652,7 +685,7 @@ func TestLoadConfigDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.remoteMode != "tailscale" || cfg.remoteTunnel != remote.ModeFunnel || cfg.addr != defaultAddr || cfg.dataDir != "/data" {
+	if cfg.remoteMode != "cloudflare" || cfg.remoteTunnel != remote.ModeFunnel || cfg.addr != defaultAddr || cfg.dataDir != "/data" {
 		t.Fatalf("cfg = %+v", cfg)
 	}
 	env["AF_REMOTE"] = "tailscal"

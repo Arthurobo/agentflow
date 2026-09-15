@@ -14,12 +14,18 @@ terminal later from any paired device. agentflow does not replace the agents: it
 the `claude` and `opencode` you already have, logged in as you, and serves a
 web UI (built into the binary) for talking to them.
 
-- **Your machine, your Tailscale account.** Remote access uses your own
-  [Tailscale](https://tailscale.com) account: the Tailscale already installed
-  on this computer (`https://<machine>.<tailnet>.ts.net:8443`) or agentflow's
-  built-in node (`https://agentflow-<random>.<tailnet>.ts.net`). Tailscale
-  can't see the traffic, and nothing goes through servers run by this
-  project.
+- **A stable address with nothing to set up.** By default the agentflow
+  account service gives this machine its own Cloudflare tunnel at
+  `https://<adjective>-<noun>-<4 digits>.useagentflow.xyz`; no account and no
+  sign-in are needed. Cloudflare terminates TLS for that address and can see
+  the traffic. To get the tunnel the account service learns this machine's
+  random id, its hostname and a hash of a secret the machine keeps.
+- **Or your own Tailscale account.** `AF_REMOTE=tailscale` uses
+  [Tailscale](https://tailscale.com) instead: agentflow's built-in node
+  (`https://agentflow-<random>.<tailnet>.ts.net`) or the Tailscale already
+  installed on this computer (`https://<machine>.<tailnet>.ts.net:8443`).
+  Tailscale can't see the traffic, and nothing goes through servers run by
+  this project.
 - **Only paired devices see anything.** To anyone who hasn't paired, the
   public address shows nothing but the pairing page; everything else is a
   blank 404. Set `AF_REMOTE=off` (or run `agentflow remote off`) to keep
@@ -43,8 +49,8 @@ web UI (built into the binary) for talking to them.
 
 - Linux or macOS, amd64 or arm64.
 - `claude` and/or `opencode` installed, logged in, and on your `PATH`.
-- A Tailscale account for remote access, ideally with Tailscale installed and
-  signed in on this computer (not needed with `AF_REMOTE=off`).
+- Nothing else for the default remote access. `AF_REMOTE=tailscale` needs a
+  Tailscale account.
 
 ## Install
 
@@ -80,9 +86,11 @@ agentflow start
 2. unless you're already signed in, offers the optional email sign-in (press
    Enter to skip; otherwise a 6-digit code is sent to it);
 3. installs or refreshes the agentflow service and starts it;
-4. walks you through whatever Tailscale still needs: installing it, signing
-   in, a one-time permission command, or a one-click Funnel approval, each
-   with a link and QR code;
+4. follows remote access as it comes up: the Cloudflare tunnel (the default)
+   needs nothing from you; with `AF_REMOTE=tailscale` it walks you through
+   whatever Tailscale still needs (installing it, signing in, a one-time
+   permission command, or a one-click Funnel approval), each with a link and
+   QR code;
 5. waits until the public address answers;
 6. prints a pairing QR code, then keeps asking about **Request access**
    requests until you press Ctrl-C.
@@ -105,19 +113,29 @@ On Linux, user services stop when you log out unless lingering is on;
 
 | Setting | Address | Reachable from | Phone needs |
 |---|---|---|---|
-| `AF_REMOTE=tailscale`, `AF_REMOTE_MODE=funnel` (default) | `https://agentflow-<name>.<tailnet>.ts.net` (embedded, default) or `https://<machine>.<tailnet>.ts.net:8443` (`AF_TAILSCALE=system`) | the internet, through Tailscale Funnel, and your tailnet | a browser |
+| `AF_REMOTE=cloudflare` (default) | `https://<adjective>-<noun>-<4 digits>.useagentflow.xyz` | the internet, through Cloudflare | a browser |
+| `AF_REMOTE=tailscale`, `AF_REMOTE_MODE=funnel` | `https://agentflow-<name>.<tailnet>.ts.net` (embedded, default) or `https://<machine>.<tailnet>.ts.net:8443` (`AF_TAILSCALE=system`) | the internet, through Tailscale Funnel, and your tailnet | a browser |
 | `AF_REMOTE=tailscale`, `AF_REMOTE_MODE=tailnet` | same | devices in your tailnet only | the Tailscale app, signed in to the same tailnet |
 | `AF_REMOTE=off` | `http://127.0.0.1:4344` | this computer only | not applicable |
 
-By default agentflow runs its **own** Tailscale node (`tsnet`) — no install and
-no root, just a one-time browser sign-in it prints at `agentflow start`. To use
+The Cloudflare tunnel is created for this machine by the account service
+(`AF_CLOUD_URL`) the first time the daemon starts, and keeps its address across
+restarts. agentflow runs `cloudflared` itself, downloading a pinned, SHA-256
+verified release into `~/.local/share/agentflow/bin` when there is none on
+`PATH`. A machine set up with Tailscale before Cloudflare became the default
+keeps using Tailscale while `AF_REMOTE` is unset.
+
+With `AF_REMOTE=tailscale` agentflow runs its **own** Tailscale node (`tsnet`)
+by default — no install and no root, just a one-time browser sign-in it prints
+at `agentflow start`. To use
 the Tailscale already installed on this computer instead, set
 `AF_TAILSCALE=system` (that mode needs a one-time
 `sudo tailscale set --operator=$USER`, which `agentflow start` explains).
 
 Settings live in `~/.config/agentflow/agentflow.env`; run `agentflow restart`
-after editing. `agentflow remote on|off` sets `AF_REMOTE=tailscale|off` and
-restarts the service for you. See [docs/configuration.md](docs/configuration.md).
+after editing. `agentflow remote on|off` sets `AF_REMOTE` to the default
+transport (`cloudflare`, or `tailscale` on a machine already set up with
+Tailscale) or `off`, and restarts the service for you. See [docs/configuration.md](docs/configuration.md).
 
 **Hosted relay: coming soon.** An optional hosted relay, end-to-end encrypted
 so the relay can't read or control your machine, is coming. It is not in this
@@ -128,7 +146,7 @@ release.
 | Command | What it does |
 |---|---|
 | `agentflow [serve] [--addr ADDR] [--db PATH]` | run the daemon in the foreground (the default with no command) |
-| `agentflow start [--email ADDR \| --no-email]` | offer the optional email sign-in, install and start the background service, set up Tailscale, pair a phone, then approve access requests |
+| `agentflow start [--email ADDR \| --no-email]` | offer the optional email sign-in, install and start the background service, bring up remote access (and walk through Tailscale's steps with `AF_REMOTE=tailscale`), pair a phone, then approve access requests |
 | `agentflow stop` | stop the service and keep it from starting at login |
 | `agentflow restart` | restart the service |
 | `agentflow status` | service, PID, local URL, database, daemon health, remote access, email sign-in, engines |
@@ -140,7 +158,7 @@ release.
 | `agentflow remote status` | show remote-access state, transport, address, and any install, sign-in, permission or approval step |
 | `agentflow remote logout` | log agentflow's own Tailscale node out (agentflow never signs the computer's Tailscale out) |
 | `agentflow account login` / `logout` / `status` | sign in with an email (a 6-digit code), sign out, or show the account and reporting state |
-| `agentflow remote on` / `off` | set `AF_REMOTE=tailscale` / `off` and restart the service |
+| `agentflow remote on` / `off` | set `AF_REMOTE` to the default transport (`cloudflare`, or `tailscale` on a machine already set up with it) / `off` and restart the service |
 | `agentflow update` | download, verify and install the latest release, restart the service |
 | `agentflow uninstall [--purge] [--yes]` | remove the service (and the binary if it is in `~/.local/bin`); `--purge` also deletes agentflow's data and settings |
 | `agentflow version` | version, commit and build date |
@@ -174,7 +192,8 @@ agentflow uninstall --purge --yes   # don't ask
 service and deletes the binary only when it lives in `~/.local/bin`. `--purge` deletes only paths
 agentflow names: the database and its `-wal`/`-shm` files, the lock file, the
 hook secret, `remote.json`, `account.json`, `machine-id`,
-`tailscale-serve.json`, the admin socket, the
+`tailscale-serve.json`, `cloudflare-tunnel.json`, the downloaded
+`bin/cloudflared`, the admin socket, the
 reference copy of the built-in defaults, the embedded Tailscale state directory
 (after logging that node out), the uploads directory and the env file, then
 removes the directories it leaves empty. It never touches the project trust
@@ -182,7 +201,8 @@ entries it added to `~/.claude.json` or the `.agentflow-bak-*` transcript
 backups written by `make-resumable`; remove those yourself if you want them
 gone. It doesn't delete the account on the account service (sign in on the
 dashboard to do that), and an embedded node stays listed in your Tailscale
-admin console until you remove it there.
+admin console until you remove it there. The Cloudflare tunnel itself is not
+deleted; a reinstall after `--purge` gets a new address.
 
 ## Local development
 

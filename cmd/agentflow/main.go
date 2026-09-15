@@ -173,10 +173,11 @@ type config struct {
 	machineID  string
 	dataDir    string
 
-	// remoteMode is AF_REMOTE: "tailscale" or "off".
+	// remoteMode is AF_REMOTE: "cloudflare", "tailscale" or "off".
 	remoteMode string
-	// tunnelAddr is AF_TUNNEL_ADDR, the loopback address the system
-	// Tailscale forwards public requests to; "" picks a free port.
+	// tunnelAddr is AF_TUNNEL_ADDR, the loopback address cloudflared or the
+	// system Tailscale forwards public requests to; "" is the transport's
+	// default (127.0.0.1:4345 for Cloudflare, a free port for Tailscale).
 	tunnelAddr string
 	// remoteTunnel is AF_REMOTE_MODE: "funnel" or "tailnet".
 	remoteTunnel remote.Mode
@@ -220,20 +221,21 @@ func loadConfig(inv invocation, env func(string) string) (config, error) {
 	}
 	cfg.dataDir = orDefault(env("AF_DATA_DIR"), filepath.Dir(cfg.dbPath))
 
-	switch mode := orDefault(env("AF_REMOTE"), "tailscale"); mode {
-	case remote.TransportTailscale, "off":
+	switch mode := env("AF_REMOTE"); mode {
+	case "":
+		cfg.remoteMode = defaultTransport(cfg.dataDir)
+	case remote.TransportCloudflare, remote.TransportTailscale, "off":
 		cfg.remoteMode = mode
 	default:
 		// A typo must never expose more than intended: treat it as off and
 		// say so.
-		fmt.Fprintf(os.Stderr, "agentflow: AF_REMOTE=%q is not tailscale or off; remote access is disabled\n", mode)
+		fmt.Fprintf(os.Stderr, "agentflow: AF_REMOTE=%q is not cloudflare, tailscale or off; remote access is disabled\n", mode)
 		cfg.remoteMode = "off"
 	}
 	if addr := env("AF_TUNNEL_ADDR"); addr != "" {
-		// The listener the system Tailscale forwards to trusts forwarding
+		// The listener a tunnel process forwards to trusts forwarding
 		// headers, so it must be a loopback port of its own. A bad value
-		// falls back to a free loopback port rather than failing every
-		// command.
+		// falls back to the default rather than failing every command.
 		host, _, err := net.SplitHostPort(addr)
 		switch ip := net.ParseIP(host); {
 		case err != nil || ip == nil || !ip.IsLoopback():
@@ -265,6 +267,23 @@ func loadConfig(inv invocation, env func(string) string) (config, error) {
 		cfg.remoteTunnel = remote.ModeTailnet
 	}
 	return cfg, nil
+}
+
+// defaultTransport is the transport when AF_REMOTE isn't set: Cloudflare,
+// except on a machine already set up with Tailscale (agentflow's own node's
+// state, or the serve entry it added to the system Tailscale), which keeps
+// its URL and paired phones across the upgrade that made Cloudflare the
+// default.
+func defaultTransport(dataDir string) string {
+	for _, p := range []string{
+		filepath.Join(dataDir, "tailscale", "tailscaled.state"),
+		filepath.Join(dataDir, remote.ServeRecordName),
+	} {
+		if fi, err := os.Stat(p); err == nil && fi.Mode().IsRegular() { //nolint:gosec // agentflow's own state files under its data directory
+			return remote.TransportTailscale
+		}
+	}
+	return remote.TransportCloudflare
 }
 
 // agentBaseURL is where an external agent reaches the member surface. It is
@@ -553,8 +572,27 @@ func adminDecidePairRequest(api *agentapi.Server) func(context.Context, string, 
 // newRemote builds remote access for cfg. With remote off, remote.json still
 // records that, so tools reading it never see a stale "running".
 func newRemote(cfg config, api *agentapi.Server, log *slog.Logger) remote.Transport {
+	tunnels := &cloud.TunnelSource{
+		DataDir:     cfg.dataDir,
+		MachineName: cfg.machineID,
+		Client:      cloud.NewProvisionClient(cloud.BaseURLFromEnv(os.Getenv)),
+	}
 	rem, err := remote.Select(remote.SelectConfig{
 		Transport: cfg.transport(),
+		Cloudflare: remote.CloudflareConfig{
+			DataDir:    cfg.dataDir,
+			TunnelAddr: cfg.tunnelAddr,
+			LocalAddr:  cfg.addr,
+			Cached: func() (remote.TunnelGrant, bool) {
+				g, ok := tunnels.Cached()
+				return remote.TunnelGrant(g), ok
+			},
+			Fetch: func(ctx context.Context) (remote.TunnelGrant, error) {
+				g, err := tunnels.Fetch(ctx)
+				return remote.TunnelGrant(g), err
+			},
+			Log: log,
+		},
 		Tailscale: remote.Config{
 			DataDir:       cfg.dataDir,
 			Mode:          cfg.remoteTunnel,
@@ -568,7 +606,7 @@ func newRemote(cfg config, api *agentapi.Server, log *slog.Logger) remote.Transp
 		},
 	})
 	if err != nil {
-		// loadConfig only lets tailscale or off through; this is a
+		// loadConfig only lets known transports through; this is a
 		// programming error, and off is the safe answer to it.
 		log.Error("agentflow: remote access disabled", "err", err)
 		rem = remote.Off{}

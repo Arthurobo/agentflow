@@ -42,11 +42,19 @@ on your machine.
   web UI and the full API.
 - **Remote listener**: serves the public root: the web UI (to paired browsers
   only) and the device API, but not the agent mail API or the approvals hook.
+  How it is reached with `AF_REMOTE=cloudflare` (the default): Cloudflare's
+  edge terminates HTTPS for `https://<adjective>-<noun>-<4 digits>.useagentflow.xyz`
+  and sends requests through this machine's named tunnel to `cloudflared`,
+  which agentflow runs; `cloudflared` forwards plain HTTP to the loopback
+  listener agentflow opens for it (`127.0.0.1:4345`), which serves the public
+  root. Never the local listener on `127.0.0.1:4344`, which refuses the
+  tunnel's `Host` anyway.
+
   How it is reached with `AF_REMOTE=tailscale`:
-  - the system Tailscale (the default): `tailscaled` on this
+  - `AF_TAILSCALE=system`: `tailscaled` on this
     computer terminates HTTPS for `https://<machine>.<tailnet>.ts.net:8443`
     and forwards plain HTTP to a loopback listener agentflow opens for it.
-  - `AF_TAILSCALE=embedded`: a Tailscale node inside the
+  - `AF_TAILSCALE=embedded` (the default): a Tailscale node inside the
     daemon (tsnet) terminates HTTPS itself on
     `https://agentflow-<6 hex>.<tailnet>.ts.net`.
 
@@ -60,6 +68,22 @@ on your machine.
   daemon refuses unless it owns it.
 - **Engines**: `claude` and `opencode` child processes in PTYs.
 
+- **Cloudflare tunnel provisioning** (with `AF_REMOTE=cloudflare`): the daemon
+  asks the account service (`AF_CLOUD_URL`) for this machine's tunnel with no
+  sign-in, sending the random machine id, the hostname and a secret it
+  generated. The service creates the tunnel, its ingress and DNS name with its
+  own Cloudflare API token, which never leaves the service, and answers with
+  the hostname and a token scoped to that one tunnel. Whoever holds that token
+  can run a connector for the tunnel and so receive the hostname's traffic, so
+  the machine id alone, which isn't secret (the CLI prints it and the
+  dashboard shows it), is not enough: the service stores only a SHA-256 of the
+  secret, refuses the machine id with any other secret, and never stores the
+  token (it reads it from Cloudflare on each request). The daemon keeps the
+  secret, hostname and last token in `<data dir>/cloudflare-tunnel.json`
+  (mode `0600`) and passes the token to `cloudflared` in its environment, not
+  its command line. Cloudflare terminates TLS and can see all traffic to the
+  address, device tokens and terminal data included; the account service is
+  not in the path. Use `AF_REMOTE=tailscale` if that is not acceptable.
 - **Account service** (optional): if you sign in with an email, the daemon
   tells the account service (`AF_CLOUD_URL`, default
   `https://cloud.useagentflow.xyz`) this machine's id, name, transport, public
@@ -69,8 +93,10 @@ on your machine.
   terminal data.
 
 agentflow sends no telemetry. The only network calls it makes on its own are
-Tailscale's (when remote access is on), the account service's (only when you
-signed in), STUN requests when a phone sends an attachment (default server
+Cloudflare's through `cloudflared` and the account service's provisioning
+call (with `AF_REMOTE=cloudflare`), a one-time `cloudflared` download from
+GitHub when none is on `PATH`, Tailscale's (with `AF_REMOTE=tailscale`), the
+account service's machine reports (only when you signed in), STUN requests when a phone sends an attachment (default server
 `stun:stun.l.google.com:19302`), and, when you run `agentflow update` or
 `install.sh`, GitHub release downloads. The engines talk to their own
 providers as they always do.
@@ -119,7 +145,9 @@ Controls on the remote listener (`internal/httpserve`, `internal/agentapi`):
   are logged.
 - **Rate limits** per client address: 20 requests a second (burst 40); a client
   that collects 20 401 responses within 10 minutes is blocked for 15 minutes.
-  The client address is the phone's real address: on embedded-node Funnel
+  The client address is the phone's real address: on the Cloudflare tunnel
+  listener it comes from `CF-Connecting-IP`, which Cloudflare sets, and a
+  request without a valid one is refused (421); on embedded-node Funnel
   connections it is taken from the Funnel connection; on the system
   Tailscale's loopback listener it comes from `X-Forwarded-For`, which
   `tailscaled` always overwrites, and a request without that header is refused
@@ -194,9 +222,9 @@ A page on another site can make your browser send requests to
   `/health`, which reports the machine name, the `claude` version and session
   counts. Approving an access request from the local listener also needs a
   device token.
-- **Tunnel listener.** With the system Tailscale, any local process can also
-  connect to the loopback listener `tailscaled` forwards to and
-  put whatever it likes in the forwarding header. That gains it nothing: it is
+- **Tunnel listener.** With Cloudflare or the system Tailscale, any local
+  process can also connect to the loopback listener `cloudflared` or
+  `tailscaled` forwards to and put whatever it likes in the forwarding header. That gains it nothing: it is
   the public root, the less trusted of the two, with the same checks as from
   the internet; the header only decides which rate-limit bucket it lands in.
 - **Child environment.** Every `AF_*` variable except `AF_CLAUDE`, and

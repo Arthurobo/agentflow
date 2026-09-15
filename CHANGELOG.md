@@ -20,7 +20,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   pairing page with a QR scanner and **Request access**. Installable to the home screen;
   the service worker caches only build assets and icons. Binaries built without
   the export serve a placeholder page.
-- **Remote access through your own Tailscale account**, on by default:
+- **Remote access through a Cloudflare tunnel**, on by default:
+  `AF_REMOTE=cloudflare` gets this machine a named tunnel at
+  `https://<adjective>-<noun>-<4 digits>.useagentflow.xyz` from the account
+  service (`POST /v1/provision`, no sign-in; the machine id is guarded by a
+  secret the daemon generates and keeps in `cloudflare-tunnel.json`), runs a
+  pinned, SHA-256 verified `cloudflared` with the token in its environment,
+  and serves the public root on `127.0.0.1:4345` with client addresses from
+  `CF-Connecting-IP`. The last tunnel is kept so it comes up while the service
+  is down. Machines already set up with Tailscale keep it while `AF_REMOTE` is
+  unset. Cloudflare can see the traffic.
+- **Remote access through your own Tailscale account** (opt-in):
   `AF_REMOTE=tailscale` publishes `https://<machine>.<tailnet>.ts.net:8443`
   through the Tailscale installed on the computer (one serve entry, removed on
   shutdown), or `https://agentflow-<random>.<tailnet>.ts.net` through a
@@ -30,8 +40,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   visitors only the pairing page.
 - **`agentflow start`** offers an optional email sign-in (Enter skips it),
   installs or refreshes the background service (systemd user unit on Linux,
-  launchd agent on macOS), walks through installing or signing in to
-  Tailscale, permission and Funnel approval with links and terminal QR codes,
+  launchd agent on macOS), follows remote access as it comes up (with
+  Tailscale: installing or signing in, permission and Funnel approval) with links and terminal QR codes,
   waits until the public URL answers, prints a pairing QR code and asks about
   access requests. `--email` and `--no-email` make it scriptable.
 - **Optional account service** (`agentflow account login|logout|status`,

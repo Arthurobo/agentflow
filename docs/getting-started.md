@@ -7,9 +7,10 @@ From install to a terminal on your phone.
 - Linux or macOS (amd64 or arm64).
 - `claude` (Claude Code) and/or `opencode` installed, signed in, and on your
   `PATH`. agentflow does not install or sign in engines; it runs them as you.
-- A [Tailscale](https://tailscale.com) account for reaching the computer from
-  your phone, ideally with Tailscale installed and signed in on this computer.
-  Not needed if you only use agentflow on this computer (`AF_REMOTE=off`).
+- Nothing else for reaching the computer from your phone: by default agentflow
+  gets a Cloudflare tunnel for it from the agentflow account service. To use
+  your own [Tailscale](https://tailscale.com) account instead, set
+  `AF_REMOTE=tailscale` (see [configuration.md](configuration.md)).
 - Linux: a systemd user session (`systemctl --user` must work) for the
   background service. Without one, run `agentflow serve` in the foreground.
 
@@ -57,8 +58,13 @@ What you'll see, in order:
    (or "agentflow service is installed and started." when nothing changed),
    the path of your settings file, and on Linux a note to run
    `loginctl enable-linger $USER` if the service would stop when you log out.
-3. **Tailscale**, one step at a time, each with a link and QR code where
-   there is one:
+3. **Remote access.** With the default Cloudflare tunnel there is nothing to
+   do: "Starting Cloudflare...", while the daemon gets this machine's tunnel
+   from the account service and connects `cloudflared` (downloading a verified
+   copy the first time if none is on `PATH`). If the account service can't be
+   reached on the very first start, `start` shows the error and agentflow keeps
+   retrying. With `AF_REMOTE=tailscale`, Tailscale's steps follow, one at a
+   time, each with a link and QR code where there is one:
    - Tailscale not installed: the download link, and a note that
      `AF_TAILSCALE=embedded` uses agentflow's built-in node instead.
    - Tailscale signed out or stopped: `tailscale up` to run, or a sign-in link.
@@ -69,9 +75,11 @@ What you'll see, in order:
      continues on its own.
    - Funnel approval (Funnel mode, first time only): "One click to allow
      public HTTPS (Tailscale Funnel) for this machine." and an approval link.
-4. **Address.** "Remote URL: https://<machine>.<tailnet>.ts.net:8443 (Tailscale
-   funnel)" (with the embedded node,
-   `https://agentflow-xxxxxx.<tailnet>.ts.net`). A
+4. **Address.** "Remote URL: https://brave-otter-0042.useagentflow.xyz
+   (Cloudflare)" and a note that traffic passes through Cloudflare. With
+   Tailscale: "Remote URL: https://agentflow-xxxxxx.<tailnet>.ts.net (Tailscale
+   funnel)" (with the system Tailscale,
+   `https://<machine>.<tailnet>.ts.net:8443`). A
    brand-new address can take a few minutes to resolve and get a certificate;
    `start` waits (up to 3 minutes) until it answers.
 5. **Pairing.** "Scan this with your phone camera to pair it:", a QR code, the
@@ -150,11 +158,12 @@ again.
 ```sh
 agentflow remote status    # state, transport, URL, and any pending install/sign-in/permission/approval step
 agentflow remote off       # AF_REMOTE=off, restarts the service
-agentflow remote on        # AF_REMOTE=tailscale, restarts; then run agentflow start
+agentflow remote on        # AF_REMOTE=cloudflare (tailscale if this machine was set up with it), restarts; then run agentflow start
 agentflow remote logout    # log agentflow's own Tailscale node out (AF_TAILSCALE=embedded)
 ```
 
-For tailnet-only access, set `AF_REMOTE_MODE=tailnet` in
+To use Tailscale instead of Cloudflare, set `AF_REMOTE=tailscale`; for
+tailnet-only access, also set `AF_REMOTE_MODE=tailnet` in
 `~/.config/agentflow/agentflow.env` and run `agentflow restart`; the phone then
 needs the Tailscale app signed in to the same tailnet. See
 [configuration.md](configuration.md).
@@ -218,8 +227,8 @@ Logs: `journalctl --user -u agentflow` on Linux,
   full path.
 - **OpenCode doesn't show up as an engine.** It is detected when the daemon
   starts: `agentflow start` again after installing it.
-- **"not reachable from this machine yet"**. New `ts.net` addresses can take a
-  few minutes to resolve and get a certificate. Check again with
+- **"not reachable from this machine yet"**. New `useagentflow.xyz` and
+  `ts.net` addresses can take a few minutes to resolve and get a certificate. Check again with
   `agentflow doctor`.
 - **The phone shows a blank page on the public address.** Only paired browsers
   get the app there. Open `<address>/pair/` on the phone: a phone paired before
@@ -236,6 +245,13 @@ Logs: `journalctl --user -u agentflow` on Linux,
 - **The pairing link says it expired.** Links expire 15 minutes after they are
   minted. Run `agentflow pair` again.
 - **Phone lost its pairing after an address change.** Device tokens are stored
-  per address, so a new `AF_TS_HOSTNAME`, or switching between the system
-  Tailscale and the embedded node, means pairing again.
+  per address, so switching between Cloudflare and Tailscale, a new
+  `AF_TS_HOSTNAME`, or switching between the system Tailscale and the embedded
+  node, means pairing again.
+- **"can't get this machine's Cloudflare address from the account service"**.
+  The first start needs the account service (`AF_CLOUD_URL`); agentflow keeps
+  retrying. Later starts use the saved tunnel when the service is down.
+- **"this machine id already has a tunnel under another secret"**.
+  `cloudflare-tunnel.json` was lost while `machine-id` was kept. Delete
+  `~/.local/share/agentflow/machine-id` too and restart to get a new address.
 - **Service stops when you log out (Linux).** `loginctl enable-linger $USER`.

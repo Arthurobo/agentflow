@@ -30,7 +30,7 @@ starts).
 |---|---|---|
 | `AF_ADDR` | `127.0.0.1:4344` | Address of the local HTTP listener (web UI and API). `agentflow serve --addr` overrides it. A non-loopback address makes plain HTTP reachable from your network; the daemon warns at startup. See below. |
 | `AF_DB` | `~/.local/share/agentflow/agentflow.db` | SQLite database. The single-instance lock is `<AF_DB>.lock` next to it. `agentflow serve --db` overrides it. |
-| `AF_DATA_DIR` | the directory holding `AF_DB` | Other state: `hook.secret`, `remote.json`, `run/agentflow.sock`, `tailscale/`, `tailscale-serve.json`, `account.json`, `machine-id`, `defaults/`. |
+| `AF_DATA_DIR` | the directory holding `AF_DB` | Other state: `hook.secret`, `remote.json`, `run/agentflow.sock`, `cloudflare-tunnel.json`, `bin/cloudflared`, `tailscale/`, `tailscale-serve.json`, `account.json`, `machine-id`, `defaults/`. |
 | `AF_UPLOADS_DIR` | `~/.local/share/agentflow/uploads` | Where phone attachments are stored. Not derived from `AF_DATA_DIR`. |
 | `AF_RETENTION_DAYS` | `90` | Days the session index keeps a session nobody has touched. A prune runs once a day and deletes that session's indexed events, search documents and unreferenced content blobs; sessions with a live run are kept. `0` keeps everything; an unreadable value falls back to 90. |
 
@@ -53,14 +53,21 @@ look for engines in that recorded `PATH`.
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `AF_REMOTE` | `tailscale` | `tailscale` publishes through Tailscale (see `AF_TAILSCALE`); `off` disables remote access. Any other value is treated as `off`, with a warning. |
-| `AF_TAILSCALE` | `embedded` | `embedded` (default): agentflow runs its own Tailscale node (tsnet) in the daemon — no install, no root, just a one-time browser sign-in; URL `https://agentflow-<name>.<tailnet>.ts.net`. `system`: use the Tailscale already installed and signed in on this computer; agentflow adds one serve entry (HTTPS 8443, forwarded to it) and removes it on a clean shutdown, and it needs a one-time `sudo tailscale set --operator=$USER`. Any other value falls back to `embedded`, with a warning. An existing `<AF_DATA_DIR>/tailscale/tailscaled.state` from an earlier embedded node is reused. |
-| `AF_REMOTE_MODE` | `funnel` | `funnel`: public HTTPS through Tailscale Funnel (tailnet devices can use the same URL). `tailnet`: only devices in your tailnet. Any other value is treated as `tailnet`, with a warning. |
-| `AF_TUNNEL_ADDR` | a free loopback port | System Tailscale only. Loopback address of the listener `tailscaled` forwards public requests to. It must be a loopback IP address and port and must not be the `AF_ADDR` port; any other value is ignored, with a warning. |
+| `AF_REMOTE` | `cloudflare` | `cloudflare` publishes through a Cloudflare named tunnel the account service (`AF_CLOUD_URL`) creates for this machine, at `https://<adjective>-<noun>-<4 digits>.useagentflow.xyz`; no sign-in needed, and Cloudflare can see the traffic. `tailscale` publishes through Tailscale (see `AF_TAILSCALE`); `off` disables remote access. While unset, a machine already set up with Tailscale (`<AF_DATA_DIR>/tailscale/tailscaled.state` or `<AF_DATA_DIR>/tailscale-serve.json` exists) keeps `tailscale`. Any other value is treated as `off`, with a warning. |
+| `AF_TUNNEL_ADDR` | `127.0.0.1:4345` (Cloudflare); a free loopback port (system Tailscale) | Loopback address of the listener `cloudflared` or `tailscaled` forwards public requests to. Every provisioned Cloudflare tunnel's ingress points at `127.0.0.1:4345`, so change it only together with the tunnel. It must be a loopback IP address and port and must not be the `AF_ADDR` port; any other value is ignored, with a warning. Not used by the embedded Tailscale node. |
+| `AF_TAILSCALE` | `embedded` | Tailscale only. `embedded` (default): agentflow runs its own Tailscale node (tsnet) in the daemon — no install, no root, just a one-time browser sign-in; URL `https://agentflow-<name>.<tailnet>.ts.net`. `system`: use the Tailscale already installed and signed in on this computer; agentflow adds one serve entry (HTTPS 8443, forwarded to it) and removes it on a clean shutdown, and it needs a one-time `sudo tailscale set --operator=$USER`. Any other value falls back to `embedded`, with a warning. An existing `<AF_DATA_DIR>/tailscale/tailscaled.state` from an earlier embedded node is reused. |
+| `AF_REMOTE_MODE` | `funnel` | Tailscale only. `funnel`: public HTTPS through Tailscale Funnel (tailnet devices can use the same URL). `tailnet`: only devices in your tailnet. Any other value is treated as `tailnet`, with a warning. |
 | `AF_TS_HOSTNAME` | generated `agentflow-<6 hex>` | Embedded node only. Machine name in your tailnet, and so the first label of the URL. Must be lowercase letters, digits and dashes. The generated name is saved in `<AF_DATA_DIR>/tailscale/hostname` and reused. Changing the name changes the URL, and every device has to pair again (its token is stored per origin). |
 | `AF_TS_LOGS` | `off` | Embedded node only. `on` lets the Tailscale client upload its logs to Tailscale. Otherwise the daemon sets `TS_NO_LOGS_NO_SUPPORT=true` before the node starts. |
-| `AF_CLOUD_URL` | `https://cloud.useagentflow.xyz` | The account service that emails this machine's address and lists it on the dashboard (`agentflow account login`). |
+| `AF_CLOUD_URL` | `https://cloud.useagentflow.xyz` | The account service that provides this machine's Cloudflare tunnel (with `AF_REMOTE=cloudflare`, no sign-in) and, after `agentflow account login`, emails this machine's address and lists it on the dashboard. Plain `http` is refused except to a loopback address. |
 | `AF_STUN_URLS` | `stun:stun.l.google.com:19302` | Comma-separated STUN servers offered for the direct phone-to-computer attachment channel. `turn:` and `turns:` entries are dropped (media stays peer to peer). |
+
+With Cloudflare the URL is `https://<adjective>-<noun>-<4 digits>.useagentflow.xyz`,
+the same across restarts. The daemon asks the account service for it at every
+start and every 6 hours, and keeps the last answer so the tunnel still comes up
+while the service can't be reached. `cloudflared` on `PATH` is used when there
+is one; otherwise agentflow downloads the pinned release (2026.9.1), checks its
+SHA-256 and keeps it in `<AF_DATA_DIR>/bin/cloudflared`.
 
 With the system Tailscale the URL is `https://<machine>.<tailnet>.ts.net:8443`
 (this computer's own name). With the embedded node it is
@@ -97,13 +104,13 @@ These are read by `install.sh` and `agentflow update`, not by the daemon.
 
 ## Local only
 
-With `AF_REMOTE=off` there is no Tailscale. The web UI is at
+With `AF_REMOTE=off` there is no tunnel. The web UI is at
 `http://127.0.0.1:4344`, and `agentflow pair` prints a link on that address
 ("Open this on this computer to pair its browser"), which only works in a
 browser on the same computer. Everything else (terminals,
 loops, the CLI) works the same.
 
-To reach the daemon from other devices without Tailscale you can set `AF_ADDR`
+To reach the daemon from other devices without a tunnel you can set `AF_ADDR`
 to a LAN address (for example `192.168.1.20:4344`), and `agentflow pair` then
 prints a link on that address. Traffic, including device tokens, is then plain
 HTTP on your network, and some browser features (camera access for scanning a
@@ -121,10 +128,12 @@ private.
 | `~/.local/share/agentflow/hook.secret` | approvals hook secret |
 | `~/.local/share/agentflow/remote.json` | last remote-access status |
 | `~/.local/share/agentflow/run/agentflow.sock` | admin socket for the CLI |
+| `~/.local/share/agentflow/cloudflare-tunnel.json` | Cloudflare tunnel (mode `0600`): the provision secret, the hostname and the last tunnel token |
+| `~/.local/share/agentflow/bin/cloudflared` | `cloudflared` downloaded by agentflow (pinned release, SHA-256 verified) when none is on `PATH` |
 | `~/.local/share/agentflow/tailscale/` | embedded Tailscale node state and generated hostname |
 | `~/.local/share/agentflow/tailscale-serve.json` | the serve entry agentflow added to the system Tailscale |
 | `~/.local/share/agentflow/account.json` | email sign-in: email and session token for the account service |
-| `~/.local/share/agentflow/machine-id` | random id this machine is known by on the account service |
+| `~/.local/share/agentflow/machine-id` | random id this machine is known by on the account service (for its tunnel and, once signed in, its link) |
 | `~/.local/share/agentflow/defaults/` | read-only copy of the built-in loop plays and rules |
 | `~/.local/share/agentflow/uploads/` | phone attachments |
 | `~/.config/systemd/user/agentflow.service` | Linux service |

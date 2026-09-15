@@ -101,18 +101,47 @@ body caps, path traversal and headers.
 
 ## Remote access (`internal/remote`)
 
-`AF_REMOTE` picks a `Transport` through `remote.Select`: `Off` or Tailscale
-(the system or the embedded implementation); `Fake` stands in for tests. Each
+`AF_REMOTE` picks a `Transport` through `remote.Select`: Cloudflare (the
+default), Tailscale (the system or the embedded implementation) or `Off`;
+`Fake` stands in for tests. While `AF_REMOTE` is unset, a data directory with
+an earlier Tailscale setup (`tailscale/tailscaled.state` or
+`tailscale-serve.json`) keeps Tailscale. Each
 publishes the same `Status` (state, transport, public URL, and the link or
 command for whatever it is waiting on), mirrored to `<data dir>/remote.json`,
 which `agentflow remote status` reads when the daemon is down. States:
 `starting`, `needs_install`, `needs_login`, `needs_permission`,
-`needs_funnel_approval`, `running`, `error`, `off`. Both Tailscale
-implementations serve the public root on a listener of their own; the system
-one's loopback listener (`ListenTunnel`) refuses the local listener's port and
-any non-loopback address.
+`needs_funnel_approval`, `running`, `error`, `off`. Every transport serves the
+public root on a listener of its own, never the local one; the loopback
+listeners `cloudflared` and the system Tailscale forward to (`ListenTunnel`)
+refuse the local listener's port and any non-loopback address.
 
-**System Tailscale** (`system.go`, `AF_REMOTE=tailscale`, the default):
+**Cloudflare** (`cloudflare.go`, `AF_REMOTE=cloudflare`, the default):
+
+1. Open the tunnel listener (`AF_TUNNEL_ADDR`, default `127.0.0.1:4345`, where
+   the account service points every tunnel's ingress) and serve the public root
+   behind `RequireForwardedClient`: the client address comes from
+   `CF-Connecting-IP`, and a request without a valid one is refused with 421.
+2. Get the tunnel (`internal/cloud/tunnel.go`): the hostname and token from
+   `<data dir>/cloudflare-tunnel.json` right away when there are any, and from
+   `POST /v1/provision` on the account service with the machine id, hostname
+   and the secret stored in that file (generated and saved before the first
+   request). Failures retry with backoff; with no saved tunnel the status is
+   `error` naming the account service. After a successful answer the service is
+   asked again every 6 hours.
+3. Find `cloudflared` on `PATH`, or download the pinned release into
+   `<data dir>/bin` and check its SHA-256 (`internal/remote/cloudflared`).
+4. Run `cloudflared tunnel --no-autoupdate --metrics 127.0.0.1:0 run` as a
+   child with the token in `TUNNEL_TOKEN` (never on the command line), restart
+   it with backoff when it exits, and log its output. A different hostname or
+   token from the service restarts it with the new one.
+5. Every 2 seconds, check readiness: `/ready` on the metrics port `cloudflared`
+   names in its log, or, when that doesn't answer, the edge connections its log
+   reports as registered. Publish `running` with `https://<hostname>` while
+   connected, `starting` before, and `error` after an exit.
+
+`Logout` refuses: the tunnel has no account to sign out of.
+
+**System Tailscale** (`system.go`, `AF_REMOTE=tailscale`, `AF_TAILSCALE=system`):
 
 1. Look for `tailscale` on `PATH` and ask `tailscaled`'s LocalAPI for its
    status. Missing or not answering publishes `needs_install` with
@@ -139,7 +168,7 @@ any non-loopback address.
 On shutdown the entry is removed, and only if it is still exactly agentflow's.
 `Logout` refuses: the computer's Tailscale isn't agentflow's to sign out.
 
-**Embedded node** (`tsnet.go`, `AF_TAILSCALE=embedded`, or automatically when
+**Embedded node** (`tsnet.go`, `AF_REMOTE=tailscale` with `AF_TAILSCALE=embedded`, the Tailscale default, or automatically when
 an earlier node's `tailscale/tailscaled.state` exists and the system Tailscale
 isn't installed or doesn't answer within 10 seconds):
 
