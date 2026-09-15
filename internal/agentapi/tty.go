@@ -58,6 +58,16 @@ type ttySess struct {
 	// we read what it told the terminal.
 	bracketed bool
 
+	// modes mirrors the TUI's sticky DECSET private modes (alternate screen,
+	// mouse tracking), learned from its OUTPUT. The replay ring is a byte FIFO
+	// dropped whole on a width change, so the enable a full-screen TUI sends once
+	// at startup is usually gone by the time a phone (re)attaches — and without
+	// it the client renders the alternate-screen repaints into its NORMAL buffer:
+	// no scrollback, and the wheel-scroll bridge never engages. We prepend the
+	// still-on modes to every snapshot so a fresh attach lands in the same screen
+	// the TUI is actually driving.
+	modes map[int]bool
+
 	// geomCols is the terminal WIDTH every byte in replay was emitted at.
 	// Raw TUI bytes embed cursor addressing and erase ranges counted in lines
 	// AT THEIR EMISSION WIDTH: replaying them into a different width re-wraps
@@ -87,7 +97,17 @@ func (s *ttySess) remember(chunk []byte) {
 }
 
 func (s *ttySess) replaySnapshot() []byte {
-	out := make([]byte, 0, s.replayBytes)
+	// Restore the alternate screen and mouse modes the TUI is currently in, so
+	// the repaints in the ring land in the right buffer even when the enable
+	// that set them has fallen out of the ring.
+	var prefix []byte
+	for idx, m := range ttyStickyModes {
+		if s.modes[m] {
+			prefix = append(prefix, ttyStickyOn[idx]...)
+		}
+	}
+	out := make([]byte, 0, len(prefix)+s.replayBytes)
+	out = append(out, prefix...)
 	for _, c := range s.replay {
 		out = append(out, c...)
 	}
@@ -242,6 +262,38 @@ var (
 	decsetBracketedOff = []byte("\x1b[?2004l")
 )
 
+// ttyStickyModes are the DECSET private modes we restore on a fresh attach, in
+// apply order: the alternate screen (1049/1047/47) first, then mouse tracking
+// (1000/1002/1003/1006/1005/1015). The replay ring loses the enable the TUI
+// sent at startup whenever it is dropped (a width change) or evicted (2MB cap),
+// so a re-attaching client would otherwise miss the alternate screen entirely.
+var ttyStickyModes = []int{1049, 1047, 47, 1000, 1002, 1003, 1006, 1005, 1015}
+
+var ttyStickyOn, ttyStickyOff [][]byte
+
+func init() {
+	for _, m := range ttyStickyModes {
+		ttyStickyOn = append(ttyStickyOn, []byte("\x1b[?"+strconv.Itoa(m)+"h"))
+		ttyStickyOff = append(ttyStickyOff, []byte("\x1b[?"+strconv.Itoa(m)+"l"))
+	}
+}
+
+// learnModes updates the sticky-mode state from one output chunk. Last toggle
+// in the chunk wins, the order the terminal itself would apply them.
+func (s *ttySess) learnModes(chunk []byte) {
+	for idx := range ttyStickyModes {
+		i := bytes.LastIndex(chunk, ttyStickyOn[idx])
+		j := bytes.LastIndex(chunk, ttyStickyOff[idx])
+		if i < 0 && j < 0 {
+			continue
+		}
+		if s.modes == nil {
+			s.modes = map[int]bool{}
+		}
+		s.modes[ttyStickyModes[idx]] = i > j
+	}
+}
+
 // BracketedPaste reports whether the run's TUI has bracketed paste on. False
 // for an unknown run — the safe answer, since unwanted markers are visible
 // junk in the prompt box.
@@ -335,6 +387,7 @@ func (h *ttyHub) readLoop(runID string, s *ttySess) {
 					s.bracketed = false
 				}
 			}
+			s.learnModes(chunk)
 			s.remember(chunk)
 			for ch := range s.subs {
 				select {

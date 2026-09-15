@@ -5,6 +5,21 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.5]
+
+### Fixed
+
+- **Touch-scroll now works in every session, for both engines.** Full-screen
+  TUIs (OpenCode always; Claude Code in its default fullscreen mode) send the
+  "enter alternate screen" + mouse-tracking sequences once at startup, but the
+  terminal replay ring is dropped on any width change (keyboard, rotation,
+  reconnect) and evicted past its 2MB cap. A phone attaching afterward rendered
+  the alternate-screen repaints into its *normal* buffer — no scrollback, so the
+  finger-scroll bridge never engaged and fresh sessions couldn't be scrolled.
+  The daemon now learns the sticky DECSET modes (alternate screen, mouse) from
+  the stream and prepends the active ones to every replay, so a fresh attach
+  lands in the same screen the TUI is driving and scrolling works.
+
 ## [0.5.4]
 
 ### Fixed
