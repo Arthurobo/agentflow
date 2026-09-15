@@ -555,10 +555,9 @@ export const TerminalPane = forwardRef<
       };
       const onTouchMove = (ev: TouchEvent) => {
         if (ev.isTrusted !== true) return;
-        if (ev.touches.length !== 1) return; // pinch: let browser handle it
+        if (ev.touches.length !== 1) return; // pinch: let the browser handle it
         const t = ev.touches[0];
         if (!t || !term?.element) return;
-        if (term.buffer.active.type !== "alternate") return; // normal buf is native
         if (term.rows <= 0 || term.cols <= 0) return;
         const rect = term.element.getBoundingClientRect();
         const cellH = rect.height / term.rows;
@@ -572,31 +571,47 @@ export const TerminalPane = forwardRef<
         const dy = prev - t.clientY;
         lastTouchY.set(t.identifier, t.clientY);
         if (dy === 0) return;
-        // signed accumulator so a direction flip must pay back the
-        // sub-cell remainder instead of getting a free click.
+        // Signed accumulator so a direction flip pays back the sub-cell
+        // remainder instead of getting a free line.
         altTouchAcc += dy / cellH;
         const clicks = Math.trunc(altTouchAcc);
         if (clicks === 0) return;
-        tapScrolled = true; // the gesture moved the TUI: not a tap
         altTouchAcc -= clicks;
-        // The cell under the finger, 1-based and clamped into the grid.
-        const col = Math.min(
-          term.cols,
-          Math.max(1, Math.floor((t.clientX - rect.left) / cellW) + 1),
-        );
-        const row = Math.min(
-          term.rows,
-          Math.max(1, Math.floor((t.clientY - rect.top) / cellH) + 1),
-        );
-        // dy < 0 (finger dragged down) reveals older content = wheel up (64);
-        // dy > 0 (finger dragged up) = wheel down (65). clicks carries the sign.
-        const btn = clicks < 0 ? 64 : 65;
-        const count = Math.abs(clicks);
-        let seq = "";
-        for (let i = 0; i < count; i++) seq += `\x1b[<${btn};${col};${row}M`;
-        const ws = wsRef.current;
-        if (seq && ws && ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({ type: "input", data: seq }));
+        tapScrolled = true; // the gesture moved: not a tap
+        // We drive the scroll ourselves for BOTH buffers, so stop the browser
+        // from also acting on the drag (pull-to-refresh, overscroll bounce,
+        // starving our handler). Requires the non-passive listener below.
+        if (ev.cancelable) ev.preventDefault();
+        if (term.buffer.active.type === "alternate") {
+          // TUI (e.g. OpenCode): the alternate screen keeps no scrollback, so
+          // scrolling is the app's job — emit the SGR mouse-wheel report it
+          // listens for, at the cell under the finger. clicks < 0 (finger
+          // dragged down) = wheel up (64, older); clicks > 0 = wheel down (65).
+          // Verified against a real OpenCode PTY: it scrolls on this exact
+          // sequence.
+          const col = Math.min(
+            term.cols,
+            Math.max(1, Math.floor((t.clientX - rect.left) / cellW) + 1),
+          );
+          const row = Math.min(
+            term.rows,
+            Math.max(1, Math.floor((t.clientY - rect.top) / cellH) + 1),
+          );
+          const btn = clicks < 0 ? 64 : 65;
+          let seq = "";
+          for (let i = 0; i < Math.abs(clicks); i++) {
+            seq += `\x1b[<${btn};${col};${row}M`;
+          }
+          const ws = wsRef.current;
+          if (seq && ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: "input", data: seq }));
+          }
+        } else {
+          // Normal buffer (e.g. Claude, which never enters the alt screen):
+          // drive xterm's own scrollback directly instead of relying on native
+          // touch-panning, which the fixed-height host made unreliable.
+          // clicks < 0 (finger dragged down) scrolls toward older lines.
+          term.scrollLines(clicks);
         }
       };
       const onTouchEnd = (ev: TouchEvent) => {
@@ -679,7 +694,7 @@ export const TerminalPane = forwardRef<
       onTouchMoveRef = onTouchMove;
       onTouchEndRef = onTouchEnd;
       host.addEventListener("touchstart", onTouchStart, { passive: true });
-      host.addEventListener("touchmove", onTouchMove, { passive: true });
+      host.addEventListener("touchmove", onTouchMove, { passive: false });
       host.addEventListener("touchend", onTouchEnd, { passive: true });
       host.addEventListener("touchcancel", onTouchEnd, { passive: true });
 
@@ -758,7 +773,7 @@ export const TerminalPane = forwardRef<
     <div className="relative min-h-0 flex-1">
       <div
         ref={hostRef}
-        className="h-full w-full overflow-hidden overscroll-contain touch-action-[pan-y] px-2 pt-2"
+        className="h-full w-full overflow-hidden overscroll-none touch-none px-2 pt-2"
       />
       {/* Tap hint — an overlay, never a row: a reserved strip would shrink
           the terminal and force the refit the birth-geometry work exists to
