@@ -44,9 +44,29 @@ need mktemp
 if command -v curl >/dev/null 2>&1; then
   fetch() { curl -fsSL --proto '=https,http' --retry 3 -o "$2" "$1"; }
   fetch_stdout() { curl -fsSL --proto '=https,http' --retry 3 "$1"; }
+  # api_get honors GITHUB_TOKEN so shared-IP networks can raise the API's
+  # 60-request/hour unauthenticated limit to 5000/hour.
+  api_get() {
+    if [ -n "${GITHUB_TOKEN:-}" ]; then
+      curl -fsSL --proto '=https' --retry 3 -H "Authorization: Bearer ${GITHUB_TOKEN}" "$1" 2>/dev/null
+    else
+      curl -fsSL --proto '=https' --retry 3 "$1" 2>/dev/null
+    fi
+  }
+  # redirect_url follows redirects and prints the final URL, without touching
+  # the rate-limited API.
+  redirect_url() { curl -fsSL --proto '=https' -o /dev/null -w '%{url_effective}' "$1" 2>/dev/null; }
 elif command -v wget >/dev/null 2>&1; then
   fetch() { wget -q -O "$2" "$1"; }
   fetch_stdout() { wget -q -O - "$1"; }
+  api_get() {
+    if [ -n "${GITHUB_TOKEN:-}" ]; then
+      wget -q -O - --header="Authorization: Bearer ${GITHUB_TOKEN}" "$1" 2>/dev/null
+    else
+      wget -q -O - "$1" 2>/dev/null
+    fi
+  }
+  redirect_url() { wget -qS --max-redirect=0 -O /dev/null "$1" 2>&1 | sed -n 's/.*[Ll]ocation:[[:space:]]*//p' | tr -d "\r" | tail -n1; }
 else
   die "curl or wget is required"
 fi
@@ -68,9 +88,19 @@ version="${AGENTFLOW_VERSION:-}"
 if [ -z "$version" ]; then
   say "looking up the latest release"
   api="https://api.github.com/repos/${REPO}/releases/latest"
-  version=$(fetch_stdout "$api" | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1) ||
-    die "could not reach $api"
-  [ -n "$version" ] || die "could not find the latest release tag at $api"
+  version=$(api_get "$api" | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1)
+  if [ -z "$version" ]; then
+    # The unauthenticated GitHub API allows only 60 requests/hour per IP, which
+    # a shared IP (an office NAT, CI) can exhaust and then answer 403. Fall back
+    # to the release-page redirect, which is not subject to that limit, so a
+    # first install never fails on a busy network. (Set GITHUB_TOKEN to keep
+    # using the API at 5000/hour instead.)
+    say "GitHub API unavailable (rate limit?); resolving via the release page"
+    version=$(redirect_url "https://github.com/${REPO}/releases/latest" |
+      sed -n 's#.*/releases/tag/##p' | head -n 1)
+  fi
+  [ -n "$version" ] ||
+    die "could not determine the latest release tag; set AGENTFLOW_VERSION=vX.Y.Z (or GITHUB_TOKEN) and retry"
 fi
 case "$version" in
   v*) ;;

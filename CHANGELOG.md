@@ -73,7 +73,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `agentflow_<version>_<os>_<arch>.tar.gz` with `checksums.txt` signed keyless
   with cosign. `install.sh` and `agentflow update` always verify the SHA-256,
   and verify the signature when `cosign` is installed, refusing to install if
-  it fails.
+  it fails. When the GitHub API is unavailable or rate-limited (the
+  unauthenticated limit is 60 requests/hour per IP, which a shared office or CI
+  network can exhaust), `install.sh` resolves the latest tag from the release
+  page redirect instead, so installs keep working; set `GITHUB_TOKEN` to use the
+  API at its 5000/hour authenticated limit.
 - **Uninstall** removes only named paths and the service; `--purge` also logs
   agentflow's own Tailscale node out and deletes agentflow's data and settings.
 
