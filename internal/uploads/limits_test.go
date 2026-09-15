@@ -44,32 +44,53 @@ func filesUnder(t *testing.T, root string) []string {
 	return out
 }
 
-// A run that has not captured a session id has no quota to charge: usage
-// keyed on "" reads as zero, so every upload would pass. It must be refused
-// before anything is written and before the rate budget is spent.
-func TestAnUploadForARunWithoutASessionIsRefused(t *testing.T) {
+// A brand-new session has no engine session id for the first few seconds, but
+// attaching a screenshot right after starting one is the most common upload
+// flow. Such an upload must succeed, accounted against the run id so the
+// per-session quota is still charged (not bypassed).
+func TestAnUploadForARunWithoutASessionUsesTheRunID(t *testing.T) {
+	root := t.TempDir()
+	st := New(root, Limits{MaxBytes: 1 << 20, SessionBytes: 10 << 20, SessionFiles: 10, RatePerMinute: 60, RetentionDays: 7})
+	reg := newFakeRegistry()
+
+	payload := pngBytes(1024)
+	att, err := st.Ingest(context.Background(), reg,
+		RunInfo{RunID: "run-nosession", Project: "webapp"},
+		"shot.png", sha256Hex(payload), int64(len(payload)), bytes.NewReader(payload))
+	if err != nil {
+		t.Fatalf("Ingest with a run id but no session id = %v, want success", err)
+	}
+	if att.RunID != "run-nosession" {
+		t.Fatalf("attachment RunID = %q, want run-nosession", att.RunID)
+	}
+	if att.SessionID != "run-nosession" {
+		t.Fatalf("attachment SessionID = %q, want the run id fallback", att.SessionID)
+	}
+	if reg.count() != 1 {
+		t.Fatalf("one row must be registered, have %d", reg.count())
+	}
+}
+
+// A run with neither a session id nor a run id has nowhere to account the
+// bytes — usage keyed on "" reads as zero and would bypass the quota — so it
+// is refused before anything is written or the rate budget is spent.
+func TestAnUploadWithNoRunOrSessionIsRefused(t *testing.T) {
 	root := t.TempDir()
 	st := New(root, Limits{MaxBytes: 1 << 20, SessionBytes: 10 << 20, SessionFiles: 10, RatePerMinute: 60, RetentionDays: 7})
 	reg := newFakeRegistry()
 
 	payload := pngBytes(1024)
 	_, err := st.Ingest(context.Background(), reg,
-		RunInfo{RunID: "run-nosession", Project: "webapp"},
+		RunInfo{Project: "webapp"},
 		"shot.png", sha256Hex(payload), int64(len(payload)), bytes.NewReader(payload))
 	if !errors.Is(err, ErrNoSession) {
-		t.Fatalf("Ingest without a session = %v, want ErrNoSession", err)
+		t.Fatalf("Ingest with no ids = %v, want ErrNoSession", err)
 	}
 	if files := filesUnder(t, root); len(files) != 0 {
-		t.Fatalf("nothing may be written for a sessionless run, found %v", files)
+		t.Fatalf("nothing may be written, found %v", files)
 	}
 	if reg.count() != 0 {
 		t.Fatalf("no row may be registered, have %d", reg.count())
-	}
-	st.mu.Lock()
-	_, charged := st.recent["run-nosession"]
-	st.mu.Unlock()
-	if charged {
-		t.Fatal("a refused upload must not spend the run's rate budget")
 	}
 }
 

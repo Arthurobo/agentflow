@@ -46,14 +46,22 @@ const ingestBuf = 64 << 10
 // when non-empty, is a lowercase sha256 the bytes must match. On any failure
 // nothing is left on disk and any reserved bytes are released.
 func (s *Store) Ingest(ctx context.Context, reg Registry, run RunInfo, name, wantHash string, announced int64, r io.Reader) (*store.Attachment, error) {
-	// A run without a session id has nowhere to account the upload: usage
-	// keyed on an empty session id reads as zero, so every upload would pass
-	// the per-session quota. Refuse before the rate budget or the disk is
-	// touched.
-	if run.SessionID == "" {
+	// Account uploads against the engine's session id once it exists, but fall
+	// back to the run id before then. A brand-new session has no engine session
+	// id for the first few seconds, and attaching a screenshot right after
+	// starting a session is the most common upload flow — refusing there broke
+	// it. The run id is always present and keeps the per-session quota honest
+	// (accounted per run until the session id lands). Only a run with neither
+	// id has nowhere to account the bytes, so usage keyed on "" would read as
+	// zero and bypass the quota — that alone is refused.
+	account := run.SessionID
+	if account == "" {
+		account = run.RunID
+	}
+	if account == "" {
 		return nil, ErrNoSession
 	}
-	usedFiles, usedBytes, err := reg.SessionAttachmentUsage(ctx, run.SessionID)
+	usedFiles, usedBytes, err := reg.SessionAttachmentUsage(ctx, account)
 	if err != nil {
 		return nil, ErrQuota
 	}
@@ -62,7 +70,7 @@ func (s *Store) Ingest(ctx context.Context, reg Registry, run RunInfo, name, wan
 	if err := s.Allow(run.RunID, announced, usedBytes, usedFiles); err != nil {
 		return nil, err
 	}
-	dest, err := s.NewDest(run.Project, run.SessionID, name)
+	dest, err := s.NewDest(run.Project, account, name)
 	if err != nil {
 		return nil, ErrInternal
 	}
@@ -144,7 +152,7 @@ func (s *Store) Ingest(ctx context.Context, reg Registry, run RunInfo, name, wan
 	s.Reserve(written)
 
 	att := &store.Attachment{
-		ID: dest.ID, RunID: run.RunID, SessionID: run.SessionID,
+		ID: dest.ID, RunID: run.RunID, SessionID: account,
 		Path: dest.Final, Mime: mime, Bytes: written, SHA256: sum,
 		CreatedAt: time.Now().UnixMilli(),
 	}

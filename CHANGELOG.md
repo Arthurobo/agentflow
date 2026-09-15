@@ -5,6 +5,16 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.2]
+
+### Fixed
+
+- **Image upload from a just-started session.** Attaching a screenshot in the
+  first few seconds of a new session — before the engine had assigned its
+  session id, the most common moment to attach one — failed with `409 no
+  session`. Uploads now fall back to the run id for accounting, so they succeed
+  right away while the per-session quota stays enforced.
+
 ## [0.5.1]
 
 ### Changed
