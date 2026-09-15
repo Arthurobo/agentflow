@@ -5,6 +5,20 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.6]
+
+### Fixed
+
+- **Resuming a session now shows its full, current transcript.** Opening a
+  session by id (the phone's normal "open session" path) fell back to agentd's
+  own working directory whenever neither a managed run nor the session index
+  already knew the session's cwd. Because Claude keys each transcript to its
+  project folder, the resume then looked in the wrong folder, never bound the
+  session id, and showed a blank/stale terminal — so messages added to that
+  conversation elsewhere appeared "missing." The daemon now reads the session's
+  real cwd from its own transcript and resumes there, so the same conversation
+  shows up consistently in the TUI, on resume, and on the CLI.
+
 ## [0.5.5]
 
 ### Fixed

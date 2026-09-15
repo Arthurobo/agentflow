@@ -519,6 +519,55 @@ func headSessionID(path string) (string, bool) {
 	return "", false
 }
 
+// CwdForSession finds the transcript for a claude session id anywhere in the
+// corpus and returns the working directory it ran in. A resume needs the right
+// cwd because claude keys each transcript to its project folder; when neither a
+// managed run nor the session index knows the cwd (the index can be empty),
+// this reads it straight from the transcript so the resume opens in the right
+// place and binds instead of falling through to agentd's own cwd. Read-only: it
+// never writes or renames the corpus.
+func (s *Spawner) CwdForSession(sid string) string {
+	if sid == "" {
+		return ""
+	}
+	root := s.corpusRootDir()
+	if root == "" {
+		return ""
+	}
+	matches, _ := filepath.Glob(filepath.Join(root, "*", sid+".jsonl"))
+	for _, path := range matches {
+		if cwd := headCwd(path); cwd != "" {
+			return cwd
+		}
+	}
+	return ""
+}
+
+// headCwd reads the cwd off the first lines of a corpus JSONL.
+func headCwd(path string) string {
+	f, err := os.Open(path) //nolint:gosec // corpus path under the fixed ~/.claude/projects root
+	if err != nil {
+		return ""
+	}
+	defer func() { _ = f.Close() }()
+	sc := bufio.NewReader(f)
+	for i := 0; i < 40; i++ {
+		line, err := sc.ReadString('\n')
+		if strings.Contains(line, `"cwd"`) {
+			var head struct {
+				Cwd string `json:"cwd"`
+			}
+			if json.Unmarshal([]byte(strings.TrimSpace(line)), &head) == nil && head.Cwd != "" {
+				return head.Cwd
+			}
+		}
+		if err != nil {
+			return ""
+		}
+	}
+	return ""
+}
+
 // appendCustomTitle writes the user's session name into the corpus JSONL in
 // claude's own custom-title record format. The sessions list prefers it as
 // the session's name; claude itself knows the

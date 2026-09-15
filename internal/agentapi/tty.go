@@ -20,6 +20,7 @@ import (
 
 	"github.com/gorilla/websocket"
 
+	"github.com/arthurobo/agentflow/internal/engine"
 	"github.com/arthurobo/agentflow/internal/spawner"
 )
 
@@ -732,6 +733,19 @@ func (s *Server) handleTTYBySession(w http.ResponseWriter, r *http.Request) {
 		opts.Cwd = idx.Cwd
 		// The corpus knows which engine wrote the transcript.
 		opts.Engine = idx.Engine
+	}
+	if opts.Cwd == "" {
+		// Last resort: neither a managed run nor the session index (which can
+		// be empty) knew where this session lived. Read the cwd straight from
+		// the transcript so the resume opens in the right project folder and
+		// binds — otherwise it falls through to agentd's own cwd, lands in the
+		// wrong corpus folder, and the resumed conversation never shows up.
+		if cwd := s.spawner.CwdForSession(sid); cwd != "" {
+			opts.Cwd = cwd
+			if opts.Engine == "" {
+				opts.Engine = engine.IDClaude // only claude writes this corpus
+			}
+		}
 	}
 	if err := s.prepareEngine(ctx, &opts); err != nil {
 		writeError(w, http.StatusBadRequest, "engine_prepare_failed", err.Error())
