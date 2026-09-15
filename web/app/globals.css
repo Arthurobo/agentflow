@@ -326,3 +326,15 @@
     }
   }
 }
+
+/* The terminal scrolls via native panning (normal buffer) and our touch
+   handler (alternate screen); the visible viewport scrollbar is just noise on a
+   phone, so hide it while keeping scrolling fully functional. */
+.xterm-viewport {
+  scrollbar-width: none;
+}
+.xterm-viewport::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}
