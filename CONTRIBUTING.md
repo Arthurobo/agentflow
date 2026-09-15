@@ -49,7 +49,8 @@ Make targets:
 ### Running a development daemon
 
 The installed service already holds the default database and port. Run a
-second daemon with its own database, port, and no Tailscale:
+second daemon with its own database, port, and no remote access (the default
+Cloudflare transport would provision a real tunnel for it):
 
 ```sh
 AF_DB=/tmp/af-dev/agentflow.db AF_ADDR=127.0.0.1:4355 AF_REMOTE=off ./bin/agentflow serve
@@ -87,6 +88,11 @@ Rules for tests:
   `HOME` and a sandboxed transcript root.
 - Never start a real Tailscale node. `internal/remote` has a `Fake` remote,
   and the tsnet run loop is tested through a fake node.
+- Never call the real account service's `POST /v1/provision` or run a real
+  `cloudflared`: each provision creates a real Cloudflare tunnel and DNS
+  record. The Cloudflare transport is tested with a fake `Fetch` and the test
+  binary standing in for `cloudflared`, and `internal/cloud` against an
+  `httptest` server.
 - Never call the real service manager. `cmd/agentflow` routes every
   `systemctl`, `launchctl` and `loginctl` call through a runner that tests
   replace.
