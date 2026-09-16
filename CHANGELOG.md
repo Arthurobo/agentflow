@@ -5,6 +5,20 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.11]
+
+### Fixed
+
+- **The terminal screen now aligns to the visible area on a phone.** On iOS the
+  session shell was laid out from the layout-viewport top, which sits behind
+  Safari's address bar while it is expanded (`visualViewport.offsetTop > 0`) —
+  so on open the top navigation was clipped behind the chrome and the terminal,
+  sized to the visible height, ended short of the bottom and left a band of dead
+  space, with the prompt not at the true bottom. The mobile terminal route now
+  pins its shell to the visible band (`fixed` at `top: visualViewport.offsetTop`,
+  `height: visualViewport.height`) and tracks it live, so the nav and the
+  terminal sit exactly where they should and follow the keyboard and address bar.
+
 ## [0.5.10]
 
 ### Fixed
