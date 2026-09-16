@@ -858,6 +858,17 @@ func (s *Server) serveTTYWS(conn *websocket.Conn, runID, deviceID, token string)
 	}
 	defer unsub()
 
+	// Announce the replay size before the chunks so the client can show a real
+	// progress bar (bytes received / total) while the buffered history streams,
+	// instead of an opaque spinner that looks stuck on a large transcript. Sent
+	// strictly before the first replay byte. An older client ignores this frame
+	// and simply falls back to its timed reveal.
+	_ = conn.SetWriteDeadline(deadlineSoon())
+	if err := conn.WriteMessage(websocket.TextMessage,
+		[]byte(`{"type":"replay-begin","bytes":`+strconv.Itoa(len(replay))+`}`)); err != nil {
+		return
+	}
+
 	// downstream: replay ring first (the attach's recent past), then live PTY
 	// bytes as binary frames
 	for off := 0; off < len(replay); off += 32 * 1024 {
@@ -866,6 +877,16 @@ func (s *Server) serveTTYWS(conn *websocket.Conn, runID, deviceID, token string)
 		if err := conn.WriteMessage(websocket.BinaryMessage, replay[off:end]); err != nil {
 			return
 		}
+	}
+
+	// Mark the end of the replay so the client can reveal the terminal at the
+	// settled frame instead of showing every buffered repaint scroll past on
+	// attach. Sent before the live writer starts, so it is ordered strictly
+	// after the replay chunks and before any live byte. An older client simply
+	// ignores this text frame.
+	_ = conn.SetWriteDeadline(deadlineSoon())
+	if err := conn.WriteMessage(websocket.TextMessage, []byte(`{"type":"replay-done"}`)); err != nil {
+		return
 	}
 
 	// stop tells the writer and the pinger the handler is leaving. The

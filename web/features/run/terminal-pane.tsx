@@ -128,6 +128,28 @@ const OPEN_GRACE_MS = 5_000;
 // enough that transient issues clear, short enough that the user isn't
 // left staring at a spinner for minutes.
 const GIVE_UP_AFTER = 4;
+// Ceiling on how long the "loading messages…" cover stays up if the daemon's
+// `replay-done` marker never arrives (an older daemon that doesn't send it, or
+// a lost frame). Long enough for a large replay to drain on a slow phone,
+// short enough that a stuck cover self-heals quickly.
+const REPLAY_REVEAL_FALLBACK_MS = 4_000;
+
+type ControlFrame = { type?: string; bytes?: number };
+
+// The daemon sends small JSON text frames (replay-begin / replay-done) inline
+// on the same socket as the binary PTY bytes. Parse defensively: a malformed or
+// unknown text frame must never throw or disturb the terminal stream.
+function parseControlFrame(data: string): ControlFrame | null {
+  if (!data.startsWith("{")) return null;
+  try {
+    const v = JSON.parse(data) as unknown;
+    if (v && typeof v === "object") return v as ControlFrame;
+  } catch {
+    // not a control frame we understand — ignore it
+  }
+  return null;
+}
+
 // How long the container height must hold still before we re-fit. The
 // on-screen keyboard slides over ~250ms and the ResizeObserver fires on every
 // frame of it; fitting per frame sent one PTY resize per intermediate height,
@@ -164,6 +186,20 @@ export const TerminalPane = forwardRef<
   const [conn, setConn] = useState<ConnState>("idle");
   const [attempt, setAttempt] = useState(0);
   const [termReady, setTermReady] = useState(false);
+  // While true, an opaque cover hides the terminal so the on-attach replay
+  // (the daemon streams its whole 2MB ring, which xterm renders frame by
+  // frame) does not show as a churn of older chat scrolling past and a fast
+  // jump to the bottom. Revealed at the settled frame once the replay has
+  // drained — see the `replay-done` marker handling in the socket effect.
+  const [replaying, setReplaying] = useState(false);
+  // Which honest stage the cover is showing, and (for "loading") how far the
+  // buffered history has streamed in. Each transition is driven by a real
+  // signal from the daemon (replay-begin / bytes received / replay-done), never
+  // a guessed timer — so the text always reflects what is actually happening.
+  const [replayPhase, setReplayPhase] = useState<
+    "connecting" | "loading" | "drawing"
+  >("connecting");
+  const [replayPct, setReplayPct] = useState(0);
   // latest flag for the async open path (a fresh terminal's textarea needs
   // the attributes applied immediately, not on the next toggle)
   const kbRef = useRef(keyboardEnabled);
@@ -229,6 +265,16 @@ export const TerminalPane = forwardRef<
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
     let openTimer: ReturnType<typeof setTimeout> | null = null;
     let fitTimer: ReturnType<typeof setTimeout> | null = null;
+    // hide-until-settled: armed on every open (attach replays each time), fires
+    // the reveal if the `replay-done` marker never arrives (older daemon, or a
+    // dropped frame) so the cover can never get stuck up.
+    let revealTimer: ReturnType<typeof setTimeout> | null = null;
+    // replay progress accounting, reset on every open. replayTotal comes from
+    // the daemon's replay-begin marker; replayGot accumulates binary bytes until
+    // replay-done, so the bar tracks the real download.
+    let replayTotal = 0;
+    let replayGot = 0;
+    let sawReplayDone = false;
     let consecutiveFailures = 0;
     // these refs let the imperative `reconnect()` (and a visibility health
     // check) reach the same socket machinery that the effect owns, without
@@ -248,6 +294,24 @@ export const TerminalPane = forwardRef<
         clearTimeout(openTimer);
         openTimer = null;
       }
+    };
+
+    const clearRevealTimer = () => {
+      if (revealTimer) {
+        clearTimeout(revealTimer);
+        revealTimer = null;
+      }
+    };
+
+    // Drop the cover at the settled frame. Idempotent: the marker and the
+    // fallback timer both call it, and only the first one does the work.
+    const revealTerminal = () => {
+      if (disposed) return;
+      clearRevealTimer();
+      // Land at the bottom of the transcript, not wherever the mid-replay
+      // repaints left the viewport, then show it.
+      term?.scrollToBottom();
+      setReplaying(false);
     };
 
     (async () => {
@@ -433,12 +497,54 @@ export const TerminalPane = forwardRef<
           consecutiveFailures = 0;
           setAttempt(0);
           setConn("open");
+          // hide the terminal until the replay drains: the daemon replays its
+          // whole ring on every attach, so arm this on every open. The fallback
+          // reveals even if the markers never land.
+          replayTotal = 0;
+          replayGot = 0;
+          sawReplayDone = false;
+          setReplayPhase("connecting");
+          setReplayPct(0);
+          setReplaying(true);
+          clearRevealTimer();
+          revealTimer = setTimeout(revealTerminal, REPLAY_REVEAL_FALLBACK_MS);
           // heal any fit drift since dial time — no-op frame when it matches
           syncResize();
         };
         socket.onmessage = (ev) => {
-          if (typeof ev.data === "string") return;
-          term?.write(new Uint8Array(ev.data));
+          if (typeof ev.data === "string") {
+            // The daemon announces the replay size before the chunks, then
+            // marks the end. Together they drive the cover's honest stages:
+            // "loading messages… N%" while the buffered history streams in, then
+            // "drawing the terminal…" while xterm renders it.
+            const frame = parseControlFrame(ev.data);
+            if (frame?.type === "replay-begin") {
+              replayTotal = typeof frame.bytes === "number" ? frame.bytes : 0;
+              replayGot = 0;
+              setReplayPhase("loading");
+              setReplayPct(replayTotal > 0 ? 0 : 100);
+            } else if (frame?.type === "replay-done") {
+              sawReplayDone = true;
+              setReplayPhase("drawing");
+              // Write a zero-length frame: xterm invokes the callback only after
+              // it has parsed everything written before it, so the reveal fires
+              // once the replay bytes are actually on screen, not merely
+              // received.
+              term?.write(new Uint8Array(0), revealTerminal);
+            }
+            return;
+          }
+          const bytes = new Uint8Array(ev.data);
+          term?.write(bytes);
+          // Count only pre-replay-done bytes toward the bar; live bytes after it
+          // belong to the "drawing"/live phase, not the download.
+          if (!sawReplayDone && replayTotal > 0) {
+            replayGot += bytes.length;
+            // Cap at 99% so the jump to 100/reveal is the replay-done marker,
+            // not a rounding artefact.
+            const pct = Math.min(99, Math.round((replayGot / replayTotal) * 100));
+            setReplayPct(pct);
+          }
         };
         socket.onerror = () => {
           // onclose follows; do not schedule here or we double up.
@@ -733,6 +839,7 @@ export const TerminalPane = forwardRef<
         clearTimeout(fitTimer);
         fitTimer = null;
       }
+      clearRevealTimer();
       if (onViewportResizeRef) {
         window.visualViewport?.removeEventListener(
           "resize",
@@ -787,6 +894,32 @@ export const TerminalPane = forwardRef<
           <span className="bg-foreground/85 text-background rounded-full px-3 py-1.5 text-[11px] font-medium shadow-lg">
             Tap the prompt to type
           </span>
+        </div>
+      )}
+      {/* Replay cover — opaque (not the /60 wash the connect states use) so
+          the mid-replay repaints scrolling past are fully hidden until the
+          terminal has settled at the bottom. Only up once the socket is open,
+          so it never masks the connect/reconnect states below. */}
+      {conn === "open" && replaying && (
+        <div className="bg-background absolute inset-0 z-20 flex items-center justify-center px-8 text-xs">
+          <div className="text-muted-foreground pointer-events-none flex w-full max-w-[220px] flex-col items-center gap-3">
+            <div className="flex items-center gap-2">
+              <Loader2 className="size-4 animate-spin" />
+              {replayPhase === "drawing"
+                ? "Drawing the terminal…"
+                : replayPhase === "loading"
+                  ? `Loading messages… ${replayPct}%`
+                  : "Loading your session…"}
+            </div>
+            {replayPhase === "loading" && (
+              <div className="bg-muted h-1 w-full overflow-hidden rounded-full">
+                <div
+                  className="bg-primary h-full rounded-full transition-[width] duration-200 ease-out"
+                  style={{ width: `${replayPct}%` }}
+                />
+              </div>
+            )}
+          </div>
         </div>
       )}
       {conn !== "open" && (

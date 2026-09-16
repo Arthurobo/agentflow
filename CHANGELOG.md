@@ -5,6 +5,29 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.7]
+
+### Fixed
+
+- **Opening a session no longer churns before it settles.** On attach the
+  daemon streams its whole replay ring, which the phone rendered frame by
+  frame — so a session opened by showing older chat loading from the top,
+  fast-scrolling to the bottom, then wobbling for a couple of seconds before it
+  held still. The daemon now brackets the replay with `replay-begin` (carrying
+  the byte count) and `replay-done` markers; the phone keeps the terminal under
+  an opaque cover until the replay has actually drained and rendered, then
+  reveals it already scrolled to the bottom. No more visible churn on open.
+
+### Changed
+
+- **The loading cover says what it is doing, with a real progress bar.**
+  Instead of an opaque spinner that can look stuck on a large transcript, the
+  cover shows honest stages driven by real signals: "Loading messages… N%"
+  (tracking bytes received against the announced replay size) while the history
+  streams in, then "Drawing the terminal…" while xterm renders it, then it
+  reveals. Older daemons that don't send the markers fall back to a timed
+  reveal.
+
 ## [0.5.6]
 
 ### Fixed
