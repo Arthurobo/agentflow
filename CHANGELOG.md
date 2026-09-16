@@ -5,6 +5,18 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.9]
+
+### Fixed
+
+- **The loading cover now always waits for the full replay before showing the
+  terminal.** The reveal is driven by the daemon's end-of-replay marker (100%),
+  but a fixed 4-second safety fallback could reveal a large replay early — at,
+  say, 80% — over a slow phone link. The fallback is now progress-aware: as long
+  as replay bytes keep arriving it holds the cover up, and it only reveals early
+  if the stream actually stalls (or the markers never arrive). So a session is
+  shown with its recent history fully loaded, not half-loaded.
+
 ## [0.5.8]
 
 ### Fixed

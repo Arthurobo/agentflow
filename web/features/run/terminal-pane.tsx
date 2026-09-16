@@ -600,6 +600,12 @@ export const TerminalPane = forwardRef<
             // not a rounding artefact.
             const pct = Math.min(99, Math.round((replayGot / replayTotal) * 100));
             setReplayPct(pct);
+            // Progress-aware safety net: as long as replay bytes keep arriving,
+            // push the fallback reveal out so a large replay over a slow phone
+            // link is shown at 100%, never revealed half-loaded. It only fires
+            // if the stream actually stalls (or the markers never come).
+            clearRevealTimer();
+            revealTimer = setTimeout(revealTerminal, REPLAY_REVEAL_FALLBACK_MS);
           }
         };
         socket.onerror = () => {
