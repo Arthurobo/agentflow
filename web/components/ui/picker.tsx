@@ -113,17 +113,55 @@ export function Picker({
     return out;
   }, [items, query, recents]);
 
-  // Focus search on open, on a fine pointer only. On a phone focusing the
-  // search field pops the OS keyboard over the very list the user came to
-  // scroll; there the field waits until it is tapped.
+  // Focus the search when the sheet opens — on touch too. This used to be
+  // skipped on a coarse pointer because focusing popped the OS keyboard over
+  // the list; the sheet now tracks the visual viewport (below) so the list
+  // rides above the keyboard, and NOT focusing was the real bug: the sheet
+  // opens from the composer, whose keyboard stays up, so a user typing to
+  // filter was sending keystrokes to the composer behind the sheet and the
+  // list never narrowed. Blur whatever had focus first (that composer) so the
+  // already-open keyboard now drives the search field.
   useEffect(() => {
     if (!open) return undefined;
-    const coarse =
-      typeof window !== "undefined" &&
-      window.matchMedia?.("(pointer: coarse)").matches === true;
-    if (coarse) return undefined;
-    const t = setTimeout(() => inputRef.current?.focus(), 50);
+    const t = setTimeout(() => {
+      const active = document.activeElement as HTMLElement | null;
+      if (active && active !== inputRef.current) active.blur?.();
+      inputRef.current?.focus();
+    }, 50);
     return () => clearTimeout(t);
+  }, [open]);
+
+  // Keep the sheet above the on-screen keyboard. A `position: fixed; bottom: 0`
+  // sheet sits at the LAYOUT viewport bottom, which on iOS is behind the
+  // keyboard — so the search results were buried the moment the field focused.
+  // Track the visual viewport and lift the sheet by the keyboard's height,
+  // capping its height to the space that is actually visible.
+  const [sheetStyle, setSheetStyle] = useState<{
+    bottom: number | string;
+    maxHeight: string;
+  }>({ bottom: 0, maxHeight: "85dvh" });
+  useEffect(() => {
+    if (!open) return undefined;
+    const vv =
+      typeof window !== "undefined" ? window.visualViewport : undefined;
+    if (!vv) return undefined;
+    const apply = () => {
+      const keyboard = Math.max(
+        0,
+        window.innerHeight - vv.height - vv.offsetTop,
+      );
+      setSheetStyle({
+        bottom: keyboard,
+        maxHeight: `${Math.round(vv.height * 0.92)}px`,
+      });
+    };
+    apply();
+    vv.addEventListener("resize", apply);
+    vv.addEventListener("scroll", apply);
+    return () => {
+      vv.removeEventListener("resize", apply);
+      vv.removeEventListener("scroll", apply);
+    };
   }, [open]);
 
   // Lock the page behind the sheet while it is open. The run page locks
@@ -196,8 +234,8 @@ export function Picker({
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className="bg-background border-border/60 fixed inset-x-0 bottom-0 z-50 flex flex-col rounded-t-2xl border-t shadow-2xl"
-        style={{ maxHeight: "85dvh" }}
+        className="bg-background border-border/60 fixed inset-x-0 z-50 flex flex-col rounded-t-2xl border-t shadow-2xl"
+        style={{ bottom: sheetStyle.bottom, maxHeight: sheetStyle.maxHeight }}
       >
         <div className="mx-auto flex min-h-0 w-full max-w-2xl flex-1 flex-col">
           {/* grab handle: the visual cue that this is a sheet, not a page */}

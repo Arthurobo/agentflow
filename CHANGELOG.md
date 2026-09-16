@@ -5,6 +5,19 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.10]
+
+### Fixed
+
+- **The bottom-sheet picker (slash commands, models, and every other list) is
+  now searchable on a phone.** The picker deliberately skipped focusing its
+  search field on touch, so when it opened from the composer the keyboard stayed
+  pointed at the composer *behind* the sheet — typing to filter did nothing and
+  the list never narrowed. It now focuses the search on open (blurring whatever
+  had focus, so the already-open keyboard drives the search), and the sheet
+  tracks the visual viewport and lifts above the on-screen keyboard instead of
+  sitting behind it, so the results stay visible while you type.
+
 ## [0.5.9]
 
 ### Fixed
