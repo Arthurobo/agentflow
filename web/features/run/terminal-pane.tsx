@@ -133,6 +133,12 @@ const GIVE_UP_AFTER = 4;
 // a lost frame). Long enough for a large replay to drain on a slow phone,
 // short enough that a stuck cover self-heals quickly.
 const REPLAY_REVEAL_FALLBACK_MS = 4_000;
+// After the replay drains, keep the cover up this long while re-fitting and
+// pinning to the bottom every frame, so a corrective resize + repaint (the
+// clip/position fix that a composer toggle used to trigger) happens unseen and
+// the terminal is revealed already settled. Hidden latency, so it can be
+// generous without feeling slow — the cover is already up.
+const REPLAY_SETTLE_MS = 500;
 
 type ControlFrame = { type?: string; bytes?: number };
 
@@ -275,6 +281,14 @@ export const TerminalPane = forwardRef<
     let replayTotal = 0;
     let replayGot = 0;
     let sawReplayDone = false;
+    // reveal bookkeeping. `revealed` makes the reveal idempotent (marker and
+    // fallback both call it); `settleRAF` is the animation-frame loop that
+    // corrects geometry and pins to the bottom while the cover is still up.
+    // `doSettlePass` is assigned inside the async block below, where the fit and
+    // resize helpers exist; until then it is a safe no-op.
+    let revealed = false;
+    let settleRAF: number | null = null;
+    let doSettlePass: () => void = () => {};
     let consecutiveFailures = 0;
     // these refs let the imperative `reconnect()` (and a visibility health
     // check) reach the same socket machinery that the effect owns, without
@@ -303,15 +317,40 @@ export const TerminalPane = forwardRef<
       }
     };
 
-    // Drop the cover at the settled frame. Idempotent: the marker and the
-    // fallback timer both call it, and only the first one does the work.
+    const clearSettleRAF = () => {
+      if (settleRAF !== null) {
+        cancelAnimationFrame(settleRAF);
+        settleRAF = null;
+      }
+    };
+
+    // Reveal at the settled frame. Idempotent (marker + fallback both call it),
+    // and it does NOT show the terminal immediately: for a short window it keeps
+    // the cover up while it re-fits and pins to the bottom every frame. That is
+    // what makes opening a session land correct on the first try — the early
+    // birth-fit can be a few columns too wide before the layout settles (the
+    // reason opening/closing the composer used to be needed to fix the
+    // position), and a corrective resize repaints the whole frame. Doing all of
+    // that under the cover means the user only ever sees the finished, bottom-
+    // pinned, correctly-sized terminal.
     const revealTerminal = () => {
-      if (disposed) return;
+      if (disposed || revealed) return;
+      revealed = true;
       clearRevealTimer();
-      // Land at the bottom of the transcript, not wherever the mid-replay
-      // repaints left the viewport, then show it.
-      term?.scrollToBottom();
-      setReplaying(false);
+      const start = performance.now();
+      const tick = () => {
+        settleRAF = null;
+        if (disposed) return;
+        doSettlePass();
+        if (performance.now() - start < REPLAY_SETTLE_MS) {
+          settleRAF = requestAnimationFrame(tick);
+          return;
+        }
+        // Settled: one last pin, then drop the cover.
+        term?.scrollToBottom();
+        setReplaying(false);
+      };
+      settleRAF = requestAnimationFrame(tick);
     };
 
     (async () => {
@@ -426,6 +465,19 @@ export const TerminalPane = forwardRef<
         ws.send(JSON.stringify({ type: "resize", ...next }));
       };
 
+      // One pass of the settle loop: re-fit (fitNow only sends a resize through
+      // syncResize when the geometry actually changed, so a correct fit stays a
+      // no-op), remember the real geometry, and pin to the bottom. Assigned here
+      // because it needs fitNow/syncResize; revealTerminal above drives it.
+      doSettlePass = () => {
+        if (disposed || !term) return;
+        if (fitNow()) {
+          storeLastTtyGeom({ cols: term.cols, rows: term.rows });
+        }
+        syncResize();
+        term.scrollToBottom();
+      };
+
       term.onData((data) => {
         const ws = wsRef.current;
         if (!ws || ws.readyState !== WebSocket.OPEN) return;
@@ -503,6 +555,8 @@ export const TerminalPane = forwardRef<
           replayTotal = 0;
           replayGot = 0;
           sawReplayDone = false;
+          revealed = false;
+          clearSettleRAF();
           setReplayPhase("connecting");
           setReplayPct(0);
           setReplaying(true);
@@ -525,12 +579,14 @@ export const TerminalPane = forwardRef<
               setReplayPct(replayTotal > 0 ? 0 : 100);
             } else if (frame?.type === "replay-done") {
               sawReplayDone = true;
+              setReplayPct(100);
               setReplayPhase("drawing");
-              // Write a zero-length frame: xterm invokes the callback only after
-              // it has parsed everything written before it, so the reveal fires
-              // once the replay bytes are actually on screen, not merely
-              // received.
-              term?.write(new Uint8Array(0), revealTerminal);
+              // Start the settle window now that every replay byte is in xterm's
+              // write queue. revealTerminal keeps the cover up for a short spell,
+              // re-fitting and pinning to the bottom every frame, so xterm
+              // finishes rendering and any corrective resize repaints unseen —
+              // no dependence on a write-completion callback firing.
+              revealTerminal();
             }
             return;
           }
@@ -840,6 +896,7 @@ export const TerminalPane = forwardRef<
         fitTimer = null;
       }
       clearRevealTimer();
+      clearSettleRAF();
       if (onViewportResizeRef) {
         window.visualViewport?.removeEventListener(
           "resize",

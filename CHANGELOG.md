@@ -5,6 +5,21 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.8]
+
+### Fixed
+
+- **Opening a session now lands correct on the first try — bottom-pinned and
+  correctly sized.** v0.5.7 covered the replay churn but revealed a beat too
+  early: the terminal could show mid-transcript, and the early birth-fit could
+  hand the PTY a few columns too many (so the right edge clipped), which only a
+  composer open/close refit corrected. The phone now keeps the loading cover up
+  for a short settle window after the replay drains, during which it re-fits and
+  pins to the bottom every frame — so xterm finishes rendering and any
+  corrective resize repaints *under the cover*. The terminal is revealed already
+  settled: scrolled to the newest output, at the right width, no visible churn
+  and no need to toggle the keyboard.
+
 ## [0.5.7]
 
 ### Fixed
