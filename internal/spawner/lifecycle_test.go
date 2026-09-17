@@ -1,3 +1,5 @@
+//go:build unix
+
 // lifecycle_test.go — process lifecycle regressions: output lost at exit,
 // races between the pump and its readers, early deaths that read as alive,
 // shutdown that left children behind, and session ids lost on the way out.

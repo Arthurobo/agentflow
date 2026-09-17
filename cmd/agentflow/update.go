@@ -1,9 +1,7 @@
 package main
 
 import (
-	"archive/tar"
 	"bufio"
-	"compress/gzip"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -31,25 +29,30 @@ const (
 	maxBinarySize  = 512 << 20
 )
 
-// releaseAssetName is the archive for a release, as GoReleaser names it by
-// default: agentflow_<version without v>_<GOOS>_<GOARCH>.tar.gz. install.sh
-// builds exactly the same name.
+// releaseAssetName is the archive for a release, as GoReleaser names it:
+// agentflow_<version without v>_<GOOS>_<GOARCH>.<ext> — tar.gz on Linux/macOS,
+// zip on Windows. install.sh / install.ps1 build exactly the same name.
 func releaseAssetName(version, goos, goarch string) (string, error) {
 	v := strings.TrimPrefix(version, "v")
 	if v == "" {
 		return "", errors.New("empty version")
 	}
+	ext := "tar.gz"
 	switch goos {
 	case "linux", "darwin":
+		if goarch != "amd64" && goarch != "arm64" {
+			return "", fmt.Errorf("no release builds for %s/%s", goos, goarch)
+		}
+	case "windows":
+		// Only amd64 is built for Windows; Windows on ARM runs it under emulation.
+		if goarch != "amd64" {
+			return "", fmt.Errorf("no release builds for %s/%s", goos, goarch)
+		}
+		ext = "zip"
 	default:
 		return "", fmt.Errorf("no release builds for %s", goos)
 	}
-	switch goarch {
-	case "amd64", "arm64":
-	default:
-		return "", fmt.Errorf("no release builds for %s/%s", goos, goarch)
-	}
-	return fmt.Sprintf("agentflow_%s_%s_%s.tar.gz", v, goos, goarch), nil
+	return fmt.Sprintf("agentflow_%s_%s_%s.%s", v, goos, goarch, ext), nil
 }
 
 // updater downloads, verifies and installs a release over the running binary.
@@ -202,7 +205,7 @@ func (u *updater) run(ctx context.Context, version string) error {
 	}
 	fmt.Fprintln(u.out, "Checksum verified.")
 
-	newBin := filepath.Join(work, "agentflow")
+	newBin := filepath.Join(work, binaryFileName())
 	if err := extractBinary(archive, newBin); err != nil {
 		return err
 	}
@@ -312,75 +315,7 @@ func verifySHA256(path, want string) error {
 	return nil
 }
 
-// extractBinary writes the archive's top-level regular file "agentflow" to
-// dst.
-func extractBinary(archive, dst string) error {
-	f, err := os.Open(archive)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = f.Close() }()
-	gz, err := gzip.NewReader(f)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = gz.Close() }()
-	tr := tar.NewReader(gz)
-	for {
-		hdr, err := tr.Next()
-		if err == io.EOF {
-			return fmt.Errorf("%s does not contain an agentflow binary", filepath.Base(archive))
-		}
-		if err != nil {
-			return err
-		}
-		if strings.TrimPrefix(hdr.Name, "./") != "agentflow" || hdr.Typeflag != tar.TypeReg {
-			continue
-		}
-		if hdr.Size <= 0 || hdr.Size > maxBinarySize {
-			return fmt.Errorf("agentflow binary in the archive has an implausible size (%d bytes)", hdr.Size)
-		}
-		out, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
-		if err != nil {
-			return err
-		}
-		if _, err := io.CopyN(out, tr, hdr.Size); err != nil {
-			_ = out.Close()
-			return err
-		}
-		return out.Close()
-	}
-}
-
-// replaceFile atomically replaces dst with a copy of src (mode 0755): the
-// copy is written and synced next to dst, then renamed over it, so a crash
-// never leaves a half-written binary where the service expects one.
-func replaceFile(dst, src string) error {
-	in, err := os.Open(src)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = in.Close() }()
-	tmp, err := os.CreateTemp(filepath.Dir(dst), ".agentflow-update-*")
-	if err != nil {
-		return err
-	}
-	name := tmp.Name()
-	defer func() { _ = os.Remove(name) }()
-	if _, err := io.Copy(tmp, in); err != nil {
-		_ = tmp.Close()
-		return err
-	}
-	if err := tmp.Chmod(0o755); err != nil {
-		_ = tmp.Close()
-		return err
-	}
-	if err := tmp.Sync(); err != nil {
-		_ = tmp.Close()
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-	return os.Rename(name, dst)
-}
+// extractBinary (extract_unix.go / extract_windows.go) writes the archive's
+// agentflow binary to dst, and replaceFile installs it over the running binary.
+// They are platform-specific: tar.gz + atomic rename on Unix, zip + a
+// rename-the-running-exe dance on Windows (which cannot overwrite an open .exe).

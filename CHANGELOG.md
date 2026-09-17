@@ -5,6 +5,33 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0]
+
+### Added
+
+- **Windows support.** agentflow now builds, installs, and runs on Windows
+  (amd64) with the same flow as Linux/macOS — one install command, a background
+  service, a Cloudflare tunnel, a QR code, and phone pairing:
+  - **Install:** `install.ps1` (`irm https://raw.githubusercontent.com/arthurobo/agentflow/main/install.ps1 | iex`)
+    downloads the verified release zip, installs `agentflow.exe` to
+    `%LOCALAPPDATA%\agentflow\bin`, adds it to your user PATH, and runs
+    `agentflow start`. `agentflow update` self-updates the same way (zip +
+    rename-the-running-exe, since Windows can't overwrite an open `.exe`).
+  - **Terminal:** child TUIs run through the Windows pseudoconsole (ConPTY),
+    mirrored to the browser exactly like the Unix PTY path; npm `.cmd` shims
+    (e.g. Claude Code) are launched through `cmd.exe`.
+  - **Background service:** a per-user Scheduled Task started at logon (no admin
+    required, runs in your session so engines see your profile and auth). It
+    stops at logout — a true Windows service is a later option.
+  - **Process control:** Job/tree termination via `taskkill /T`, liveness via
+    `OpenProcess`, and single-instance locking via `LockFileEx`.
+  - **cloudflared:** the pinned, SHA-256-verified Windows binary is downloaded
+    and supervised like on the other platforms.
+  - Releases now include `agentflow_<version>_windows_amd64.zip`.
+
+  Note: the Windows binary is not yet Authenticode-signed, so first-run
+  SmartScreen/antivirus warnings are expected until signing is set up.
+
 ## [0.5.11]
 
 ### Fixed

@@ -26,7 +26,8 @@ func TestReleaseAssetName(t *testing.T) {
 		{"1.2.3", "linux", "arm64", "agentflow_1.2.3_linux_arm64.tar.gz", false},
 		{"v0.6.0-rc.1", "darwin", "arm64", "agentflow_0.6.0-rc.1_darwin_arm64.tar.gz", false},
 		{"v1.0.0", "darwin", "amd64", "agentflow_1.0.0_darwin_amd64.tar.gz", false},
-		{"v1.0.0", "windows", "amd64", "", true},
+		{"v1.0.0", "windows", "amd64", "agentflow_1.0.0_windows_amd64.zip", false},
+		{"v1.0.0", "windows", "arm64", "", true},
 		{"v1.0.0", "linux", "386", "", true},
 		{"v", "linux", "amd64", "", true},
 	}

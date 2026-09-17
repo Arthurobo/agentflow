@@ -1,12 +1,12 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
-	"syscall"
 )
 
 // instanceLock is the daemon's single-instance lock, held for its lifetime.
@@ -19,10 +19,14 @@ type instanceLock struct {
 // daemons can never share a database whatever their other settings say.
 func lockPathFor(dbPath string) string { return dbPath + ".lock" }
 
-// acquireInstanceLock takes an exclusive, non-blocking flock on dbPath.lock
-// and records this process's pid in it. A second daemon on the same database
-// gets an error naming the first one's pid: starting anyway would reap every
-// live run the first daemon owns.
+// errLockBusy is what the OS lock primitives (lock_unix.go / lock_windows.go)
+// return when another process already holds the lock.
+var errLockBusy = errors.New("lock is held by another process")
+
+// acquireInstanceLock takes an exclusive, non-blocking lock on dbPath.lock and
+// records this process's pid in it. A second daemon on the same database gets an
+// error naming the first one's pid: starting anyway would reap every live run
+// the first daemon owns. The OS drops the lock when the process exits.
 func acquireInstanceLock(dbPath string) (*instanceLock, error) {
 	path := lockPathFor(dbPath)
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
@@ -32,9 +36,9 @@ func acquireInstanceLock(dbPath string) (*instanceLock, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+	if err := lockFileExclusive(f); err != nil {
 		_ = f.Close()
-		if err == syscall.EWOULDBLOCK {
+		if errors.Is(err, errLockBusy) {
 			return nil, fmt.Errorf("agentflow is already running (pid %d; lock %s)", readLockPID(path), path)
 		}
 		return nil, fmt.Errorf("lock %s: %w", path, err)
@@ -55,16 +59,21 @@ func daemonHoldsLock(dbPath string) bool {
 		return false
 	}
 	defer func() { _ = f.Close() }()
-	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_SH|syscall.LOCK_NB); err != nil {
-		return err == syscall.EWOULDBLOCK
+	acquired, err := tryLockShared(f)
+	if err != nil {
+		return false
 	}
-	_ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
-	return false
+	if acquired {
+		unlockFile(f)
+		return false
+	}
+	// Could not take a shared lock: an exclusive holder (a live daemon) has it.
+	return true
 }
 
-// Release drops the lock. The kernel also drops it when the process exits.
+// Release drops the lock. The OS also drops it when the process exits.
 func (l *instanceLock) Release() {
-	_ = syscall.Flock(int(l.f.Fd()), syscall.LOCK_UN)
+	unlockFile(l.f)
 	_ = l.f.Close()
 }
 

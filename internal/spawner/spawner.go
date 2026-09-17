@@ -724,9 +724,9 @@ type Proc struct {
 	// nil exited (a Proc assembled by hand) means "not known to be gone".
 	exited    chan struct{}
 	exitErr   error
-	stopped   atomic.Bool // user-requested interrupt/close-stdin (Stop semantics)
-	stdinMu   sync.Mutex  // serializes stream-json envelope writes (chat mode)
-	ptyMaster *os.File    // tty kind only: the PTY master (agentd tty hub reads it)
+	stopped   atomic.Bool   // user-requested interrupt/close-stdin (Stop semantics)
+	stdinMu   sync.Mutex    // serializes stream-json envelope writes (chat mode)
+	ptyMaster ptyMasterFile // tty kind only: the PTY master (agentd tty hub reads it)
 }
 
 // newProc wraps a started child and begins watching for its exit.
@@ -781,16 +781,10 @@ func (p *Proc) signal(sig syscall.Signal, pgid int) error {
 	if p.child.Signal != nil {
 		return p.child.Signal(sig)
 	}
-	var err error
-	if p.child.Process != nil {
-		err = p.child.Process.Signal(sig)
+	if p.child.Process == nil {
+		return nil
 	}
-	if pgid > 0 {
-		if kerr := syscall.Kill(-pgid, sig); kerr != nil && err == nil {
-			err = kerr
-		}
-	}
-	return err
+	return deliverSignal(p.child.Process, pgid, sig)
 }
 
 // update applies fn to the live session under the per-process lock.
@@ -1256,7 +1250,7 @@ func (s *Spawner) terminateAsync(p *Proc, sess *Session, pgid int, identityValid
 
 	// An orphan: no pump and no handle, only a pid the identity check has
 	// vouched for. Grace, then SIGKILL, then poll until it is gone.
-	if err := syscall.Kill(target, syscall.SIGTERM); err != nil { //nolint:gosec // target is a pid or negative pgid
+	if err := syscallSignalTarget(target, syscall.SIGTERM); err != nil {
 		s.log.Info("spawner: terminate SIGTERM (best-effort)", "run", sess.ID, "target", target, "err", err)
 	}
 	go func() {
@@ -1426,7 +1420,7 @@ func (s *Spawner) persistTerminated(sess *Session, reason string, confirmed bool
 // syscallKill sends SIGKILL to a pid, or to a whole process group when
 // target is a negative pgid.
 func syscallKill(target int) error {
-	return syscall.Kill(target, syscall.SIGKILL) //nolint:gosec // target is either a positive pid or negative pgid
+	return syscallSignalTarget(target, syscall.SIGKILL)
 }
 
 // isTerminalState reports whether the spawner-state column already

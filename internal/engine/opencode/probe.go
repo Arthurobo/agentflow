@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os/exec"
-	"syscall"
 	"time"
 
 	"github.com/arthurobo/agentflow/internal/engine"
@@ -45,17 +44,14 @@ func ProbeModels(ctx context.Context, binary, cwd string, allocPort func() (int,
 	//nolint:gosec // G204: the configured opencode binary, with a built argv.
 	cmd := exec.Command(binary, "serve", "--port", fmt.Sprint(port), "--hostname", "127.0.0.1")
 	cmd.Dir = cwd
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	setProcessGroup(cmd)
 	if err := cmd.Start(); err != nil {
 		return nil, fmt.Errorf("opencode: probe: start serve: %w", err)
 	}
 	defer func() {
-		// Kill the GROUP: serve is a node process that spawns children, and
+		// Kill the whole tree: serve is a node process that spawns children, and
 		// killing only the parent leaves a listener holding the port.
-		if cmd.Process != nil {
-			_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
-			_ = cmd.Process.Kill()
-		}
+		killProcessTree(cmd)
 		_ = cmd.Wait()
 	}()
 

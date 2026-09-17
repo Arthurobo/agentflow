@@ -10,16 +10,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"math"
+	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/arthurobo/agentflow/internal/claudelog/eventmodel"
 	"github.com/arthurobo/agentflow/internal/engine"
-	"github.com/creack/pty"
 )
 
 // StartTTY spawns (or restarts) the interactive TUI for an existing run key.
@@ -60,16 +58,13 @@ func (s *Spawner) StartTTY(ctx context.Context, runID string, opts Options) (*Se
 	if err != nil {
 		return nil, err
 	}
-	//nolint:gosec // G204: the spawner intentionally launches the user-configured engine binary with a built argv.
-	cmd := exec.Command(bin, args...)
-	cmd.Dir = opts.Cwd
 	// agentd is a daemon: whatever TERM/COLOR/CI variables leaked into ITS
 	// environment (systemd, automation shells, SSH without a TTY) must never
 	// decide the child TUI's capability detection. TERM=dumb in particular
 	// made claude emit zero color codes — the "black and white TUI" bug.
 	// OpenCode doesn't use the scrub vars; the engine's SpawnEnv is empty
 	// for it, so the scrub applies anyway.
-	cmd.Env = ChildSpawnEnv(os.Environ(), KindTTY, s.envFor(opts))
+	childEnv := ChildSpawnEnv(os.Environ(), KindTTY, s.envFor(opts))
 
 	// Birth at the viewer's real size: explicit opts win, then remembered
 	// geometry for the resumed claude session, then the 80×24 classic. This
@@ -97,7 +92,7 @@ func (s *Spawner) StartTTY(ctx context.Context, runID string, opts Options) (*Se
 	// may bind to, the files already there (another session's, never ours)
 	// and, on --resume, the one file it must be.
 	scope := s.discoveryScopeFor(opts)
-	master, err := pty.StartWithSize(cmd, &pty.Winsize{Cols: cols, Rows: rows})
+	tp, err := startTTYProcess(bin, args, opts.Cwd, childEnv, cols, rows)
 	if err != nil {
 		now := s.now()
 		crash := &Session{
@@ -112,10 +107,11 @@ func (s *Spawner) StartTTY(ctx context.Context, runID string, opts Options) (*Se
 		return crash, fmt.Errorf("spawner: start tty claude: %w", err)
 	}
 
+	master := tp.master
 	now := s.now()
 	sess := &Session{
 		ID: runID, Kind: KindTTY, CWD: opts.Cwd, Project: opts.Project,
-		Model: opts.Model, State: StateStarting, PID: cmd.Process.Pid,
+		Model: opts.Model, State: StateStarting, PID: tp.process.Pid,
 		StartedAt: now, UpdatedAt: now, CreatedBy: opts.CreatedBy,
 		Title:       opts.Title,
 		Engine:      resolveEngineID(opts.Engine),
@@ -134,9 +130,9 @@ func (s *Spawner) StartTTY(ctx context.Context, runID string, opts Options) (*Se
 
 	pctx, cancel := context.WithCancel(context.Background())
 	waitch := make(chan error, 1)
-	go func() { waitch <- cmd.Wait() }()
+	go func() { waitch <- tp.wait() }()
 	p := newProc(sess, Child{
-		Process: cmd.Process,
+		Process: tp.process,
 		Stdin:   master, // PTY master: writes are terminal input
 		Stdout:  master, // the tty hub reads TUI output here
 		Waitch:  waitch,
@@ -220,7 +216,18 @@ func (s *Spawner) SetSessionID(runID, sessionID string) error {
 
 // PTYMaster returns the live PTY master for a tty run (nil for other kinds /
 // dead runs). Callers must not close it — the spawner owns the lifetime.
-func (s *Spawner) PTYMaster(runID string) (*os.File, bool) {
+func (s *Spawner) PTYMaster(runID string) (io.ReadWriteCloser, bool) {
+	m, ok := s.ptyMasterOf(runID)
+	if !ok || m == nil {
+		return nil, false
+	}
+	return m, true
+}
+
+// ptyMasterOf returns the run's PTY master as the internal interface, so the
+// resize/size operations (backed by creack/pty on Unix and ConPTY on Windows)
+// are reachable without exposing the platform type.
+func (s *Spawner) ptyMasterOf(runID string) (ptyMasterFile, bool) {
 	s.mu.Lock()
 	p, ok := s.procs[runID]
 	s.mu.Unlock()
@@ -235,15 +242,15 @@ func (s *Spawner) PTYMaster(runID string) (*os.File, bool) {
 // has no live PTY). agentd's tty hub uses it to know which width existing
 // replay bytes were emitted at.
 func (s *Spawner) TTYSize(runID string) (cols, rows uint16, ok bool) {
-	m, live := s.PTYMaster(runID)
+	m, live := s.ptyMasterOf(runID)
 	if !live {
 		return 0, 0, false
 	}
-	r, c, err := pty.Getsize(m)
-	if err != nil || r < 0 || c < 0 || r > math.MaxUint16 || c > math.MaxUint16 {
+	c, r, err := m.size()
+	if err != nil {
 		return 0, 0, false
 	}
-	return uint16(c), uint16(r), true
+	return c, r, true
 }
 
 // ResizeTTY applies a new window size to the run's PTY (TIOCSWINSZ) and
@@ -252,12 +259,12 @@ func (s *Spawner) TTYSize(runID string) (cols, rows uint16, ok bool) {
 // frame, and overlapping clients (two phones, retry storms) requesting
 // the same geometry must not churn repaints into the output stream.
 func (s *Spawner) ResizeTTY(runID string, cols, rows uint16) error {
-	m, ok := s.PTYMaster(runID)
+	m, ok := s.ptyMasterOf(runID)
 	if !ok {
 		return fmt.Errorf("spawner: no live tty for %s", runID)
 	}
-	if curRows, curCols, err := pty.Getsize(m); err == nil &&
-		curRows == int(rows) && curCols == int(cols) {
+	if curCols, curRows, err := m.size(); err == nil &&
+		curRows == rows && curCols == cols {
 		return nil
 	}
 	s.mu.Lock()
@@ -267,7 +274,7 @@ func (s *Spawner) ResizeTTY(runID string, cols, rows uint16) error {
 		p.update(func(sc *Session) { sid = sc.SessionID })
 	}
 	s.mu.Unlock()
-	if err := pty.Setsize(m, &pty.Winsize{Cols: cols, Rows: rows}); err != nil {
+	if err := m.resize(cols, rows); err != nil {
 		return err
 	}
 	s.rememberGeom(sid, cols, rows)

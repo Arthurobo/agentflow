@@ -196,7 +196,7 @@ func TestEnsureRefusesUnverifiedDownloads(t *testing.T) {
 
 func TestEnsureErrors(t *testing.T) {
 	rs := newReleaseServer(t, nil)
-	i := testInstaller(t, rs, "windows/amd64", releases)
+	i := testInstaller(t, rs, "windows/arm64", releases) // no pinned download (amd64 runs under emulation)
 	if _, _, err := i.Ensure(context.Background()); !errors.Is(err, ErrUnsupported) {
 		t.Fatalf("unsupported platform: %v", err)
 	}

@@ -2,6 +2,7 @@
 /bin/
 /dist/
 /agentflow
+/agentflow.exe
 
 # Local development data dir (`make dev`)
 /.dev/

@@ -185,6 +185,9 @@ func openInBrowser(u string) error {
 			return errors.New("no display")
 		}
 		cmd = exec.Command("xdg-open", u) //nolint:gosec // fixed opener; the URL is one argument, never a shell string
+	case "windows":
+		// rundll32 opens the default handler without cmd.exe quoting pitfalls.
+		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", u) //nolint:gosec // fixed opener; the URL is one argument, never a shell string
 	default:
 		return errors.New("unsupported platform")
 	}

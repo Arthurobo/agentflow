@@ -18,6 +18,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 )
 
@@ -72,6 +73,13 @@ var releases = map[string]release{
 		binarySHA256: "9a0b19f67dc7a3011bc6b972c7ce06a5fcea8784ac6bd599ffa382ea4aeb5a6e",
 		tgz:          true,
 	},
+	// cloudflared ships a raw .exe for Windows (amd64 only; Windows on ARM runs
+	// it under emulation). asset == binary hash since it is not archived.
+	"windows/amd64": {
+		asset:        "cloudflared-windows-amd64.exe",
+		assetSHA256:  "2837888cc0f5d58f15b6dc478376de90b4d3ba5241c7947455d1e0a0df429712",
+		binarySHA256: "2837888cc0f5d58f15b6dc478376de90b4d3ba5241c7947455d1e0a0df429712",
+	},
 }
 
 const releaseBaseURL = "https://github.com/cloudflare/cloudflared/releases/download/"
@@ -110,7 +118,13 @@ func NewInstaller(dataDir string) *Installer {
 }
 
 // Path is where the downloaded binary is kept.
-func (i *Installer) Path() string { return filepath.Join(i.dataDir, "bin", "cloudflared") }
+func (i *Installer) Path() string {
+	name := "cloudflared"
+	if strings.HasPrefix(i.platform, "windows/") {
+		name += ".exe"
+	}
+	return filepath.Join(i.dataDir, "bin", name)
+}
 
 // Ensure returns the cloudflared to run. One on PATH wins (the person
 // installed and updates it themselves); otherwise the pinned release in

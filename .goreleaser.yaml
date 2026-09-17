@@ -18,9 +18,14 @@ builds:
     main: ./cmd/agentflow
     env:
       - CGO_ENABLED=0
-    goos: [linux, darwin]
+    goos: [linux, darwin, windows]
     goarch: [amd64, arm64]
     goamd64: [v1]
+    # cloudflared ships no native windows/arm64 build (it runs the amd64 build
+    # under emulation), so we only publish windows/amd64.
+    ignore:
+      - goos: windows
+        goarch: arm64
     mod_timestamp: "{{ .CommitTimestamp }}"
     flags:
       - -trimpath
@@ -33,6 +38,9 @@ builds:
 archives:
   - id: default
     formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
     files:
       - README.md
       - LICENSE

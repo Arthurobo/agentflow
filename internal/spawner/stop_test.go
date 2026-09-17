@@ -1,3 +1,5 @@
+//go:build unix
+
 // stop_test.go — the universal terminate()/Stop() escalation path.
 // Regression tests for the "cancel
 // doesn't kill the loop" bug and for the four kill-path defects found
@@ -181,7 +183,7 @@ func TestStopKillsTTYProcess(t *testing.T) {
 	sp.procs["run-1"] = &Proc{
 		sess:      &Session{ID: "run-1", Kind: KindTTY, PID: pid, State: StateRunning},
 		child:     Child{Process: cmd.Process},
-		ptyMaster: master,
+		ptyMaster: testPTYMaster{master},
 		done:      make(chan struct{}),
 	}
 
@@ -231,7 +233,7 @@ func TestStopKillsWholeProcessGroup(t *testing.T) {
 	sp.procs["grp"] = &Proc{
 		sess:      &Session{ID: "grp", Kind: KindTTY, PID: pid, State: StateRunning},
 		child:     Child{Process: cmd.Process},
-		ptyMaster: master,
+		ptyMaster: testPTYMaster{master},
 		done:      make(chan struct{}),
 	}
 	if err := sp.Stop(context.Background(), "grp"); err != nil {
@@ -293,7 +295,7 @@ func TestStopIsIdempotent(t *testing.T) {
 	sp.procs["run-2"] = &Proc{
 		sess:      &Session{ID: "run-2", Kind: KindTTY, PID: pid, State: StateRunning},
 		child:     Child{Process: cmd.Process},
-		ptyMaster: master,
+		ptyMaster: testPTYMaster{master},
 		done:      make(chan struct{}),
 	}
 	if err := sp.Stop(context.Background(), "run-2"); err != nil {
