@@ -47,24 +47,41 @@ web UI (built into the binary) for talking to them.
 
 ## Requirements
 
-- Linux or macOS, amd64 or arm64.
+- Linux or macOS (amd64 or arm64), or Windows 10/11 (amd64; ARM runs the amd64
+  build under emulation).
 - `claude` and/or `opencode` installed, logged in, and on your `PATH`.
 - Nothing else for the default remote access. `AF_REMOTE=tailscale` needs a
   Tailscale account.
 
 ## Install
 
+**Linux and macOS:**
+
 ```sh
 curl -fsSL https://raw.githubusercontent.com/arthurobo/agentflow/main/install.sh | sh
+```
+
+**Windows (PowerShell):**
+
+```powershell
+irm https://raw.githubusercontent.com/arthurobo/agentflow/main/install.ps1 | iex
 ```
 
 The installer downloads the release archive for your OS and CPU, verifies its
 SHA-256 against the release's `checksums.txt` (and, if `cosign` is installed,
 the signature on `checksums.txt`; a failed signature aborts the install),
-installs `~/.local/bin/agentflow` and runs `agentflow start`.
+installs the binary (`~/.local/bin/agentflow` on Linux/macOS,
+`%LOCALAPPDATA%\agentflow\bin\agentflow.exe` on Windows) and runs
+`agentflow start`.
 
-Installer options: `AGENTFLOW_VERSION=v0.5.0` pins a release,
-`AGENTFLOW_NO_START=1` installs without starting.
+> **Windows note:** the `.exe` is not yet code-signed, so Windows
+> SmartScreen/Defender may warn on first download or run. Choose **Keep** on the
+> download and **More info → Run anyway** if prompted. The background service is
+> a per-user Scheduled Task that starts at logon (it stops when you log out).
+
+Installer options: `AGENTFLOW_VERSION=v0.6.0` pins a release,
+`AGENTFLOW_NO_START=1` installs without starting (set them as environment
+variables, e.g. `$env:AGENTFLOW_NO_START=1` in PowerShell).
 
 **From source.** `make build` builds `./bin/agentflow` with the web UI
 embedded; it needs Go 1.26 and Node.js (the CI uses Node 22).
@@ -172,13 +189,15 @@ The CLI talks to the running daemon over a Unix socket in its data directory
 
 ## Platforms
 
-| | Linux | macOS |
-|---|---|---|
-| Release builds | amd64, arm64 | amd64, arm64 |
-| Background service | systemd user unit (`~/.config/systemd/user/agentflow.service`) | launchd agent (`~/Library/LaunchAgents/com.arthurobo.agentflow.plist`) |
-| Logs | `journalctl --user -u agentflow` | `~/Library/Logs/agentflow/agentflow.log` |
+| | Linux | macOS | Windows |
+|---|---|---|---|
+| Release builds | amd64, arm64 | amd64, arm64 | amd64 |
+| Background service | systemd user unit (`~/.config/systemd/user/agentflow.service`) | launchd agent (`~/Library/LaunchAgents/com.arthurobo.agentflow.plist`) | per-user Scheduled Task (`agentflow`, at logon) |
+| Logs | `journalctl --user -u agentflow` | `~/Library/Logs/agentflow/agentflow.log` | run `agentflow serve` in a terminal, or Task Scheduler (`taskschd.msc`) |
+| Terminal | Unix PTY | Unix PTY | ConPTY |
 
-Other platforms have no release builds or service support.
+The Windows service runs in your user session (no admin needed) and stops at
+logout. Other platforms have no release builds or service support.
 
 ## Uninstall
 

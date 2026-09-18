@@ -15,7 +15,11 @@
 #   AGENTFLOW_NO_START=1    install only; don't run `agentflow start`
 
 $ErrorActionPreference = 'Stop'
-[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocol]::Tls12
+# Ensure TLS 1.2 on Windows PowerShell 5.1 (best-effort; newer PowerShell already
+# negotiates it). The correct type is SecurityProtocolType, not SecurityProtocol.
+try {
+  [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+} catch { }
 
 $Repo = 'arthurobo/agentflow'
 $BinDir = Join-Path $env:LOCALAPPDATA 'agentflow\bin'
@@ -109,8 +113,10 @@ try {
 
   # --- PATH -----------------------------------------------------------------
   $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+  if (-not $userPath) { $userPath = '' }
   if (($userPath -split ';') -notcontains $BinDir) {
-    [Environment]::SetEnvironmentVariable('Path', ($userPath.TrimEnd(';') + ';' + $BinDir), 'User')
+    $newPath = if ($userPath) { $userPath.TrimEnd(';') + ';' + $BinDir } else { $BinDir }
+    [Environment]::SetEnvironmentVariable('Path', $newPath, 'User')
     $env:Path = $env:Path + ';' + $BinDir
     Say "added $BinDir to your user PATH (restart terminals to pick it up)"
   }
