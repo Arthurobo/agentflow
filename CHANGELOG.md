@@ -5,6 +5,17 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.2]
+
+### Fixed
+
+- **Windows `agentflow start` failed to install the background service**
+  (`schtasks /Create: exit status 1`), so the daemon never started and no
+  Cloudflare tunnel/URL came up. The logon task is now registered via
+  PowerShell's `Register-ScheduledTask` (program and argument passed separately,
+  avoiding `schtasks /TR` command-line quoting), with battery-friendly settings
+  and no execution-time limit, and the real error is surfaced if it still fails.
+
 ## [0.6.1]
 
 ### Fixed

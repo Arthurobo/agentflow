@@ -24,29 +24,46 @@ func newServiceManager() serviceManager { return &windowsTaskService{run: execRu
 
 func (*windowsTaskService) Supported() bool { return true }
 
-// taskCommand is what the task runs: `"<exe>" serve`.
-func (*windowsTaskService) taskCommand(exe string) string {
-	return fmt.Sprintf("\"%s\" serve", exe)
+// psSingleQuote wraps s as a PowerShell single-quoted literal (internal single
+// quotes doubled), so a path is passed verbatim with no interpretation.
+func psSingleQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", "''") + "'"
+}
+
+// createTask registers (or replaces) the logon task via PowerShell's
+// Register-ScheduledTask. Unlike `schtasks /Create /TR "..."`, the program and
+// its argument are separate parameters, so there is no fragile command-line
+// quoting to get wrong. -AllowStartIfOnBatteries / -DontStopIfGoingOnBatteries
+// matter on laptops, where tasks otherwise don't run on battery.
+func (s *windowsTaskService) createTask(ctx context.Context, exe string) error {
+	ps := "$ErrorActionPreference='Stop';" +
+		"$a=New-ScheduledTaskAction -Execute " + psSingleQuote(exe) + " -Argument 'serve';" +
+		"$t=New-ScheduledTaskTrigger -AtLogOn;" +
+		"$s=New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -ExecutionTimeLimit ([TimeSpan]::Zero);" +
+		"Register-ScheduledTask -TaskName '" + winTaskName + "' -Action $a -Trigger $t -Settings $s -Force | Out-Null"
+	out, err := s.run(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command", ps)
+	if err != nil {
+		return fmt.Errorf("%w: %s", err, strings.TrimSpace(out))
+	}
+	return nil
 }
 
 func (s *windowsTaskService) Install(ctx context.Context, spec serviceSpec) (bool, error) {
-	desired := s.taskCommand(spec.ExecPath)
-	changed := true
-	if cur, ok := s.currentTaskCommand(ctx); ok {
-		changed = !strings.EqualFold(strings.TrimSpace(cur), strings.TrimSpace(desired))
+	prev, hadPrev := s.currentTaskCommand(ctx)
+	changed := !hadPrev || !strings.Contains(prev, spec.ExecPath)
+	if err := s.createTask(ctx, spec.ExecPath); err != nil {
+		return false, fmt.Errorf("register scheduled task: %w", err)
 	}
-	if changed {
-		if _, err := s.run(ctx, "schtasks", "/Create", "/TN", winTaskName,
-			"/TR", desired, "/SC", "ONLOGON", "/RL", "LIMITED", "/F"); err != nil {
-			return false, fmt.Errorf("schtasks /Create: %w", err)
-		}
-	}
-	// An ONLOGON task is not started by /Create, so start it now if it is not
-	// already running.
-	if st := s.Query(ctx); !st.Running {
+	// A freshly (re)registered logon task is not running yet: start it now so the
+	// daemon (and the tunnel) come up without waiting for the next logon. If it
+	// was already running and the binary path changed, restart onto the new one.
+	st := s.Query(ctx)
+	if !st.Running {
 		if _, err := s.run(ctx, "schtasks", "/Run", "/TN", winTaskName); err != nil {
 			return changed, fmt.Errorf("schtasks /Run: %w", err)
 		}
+	} else if changed {
+		_ = s.Restart(ctx)
 	}
 	return changed, nil
 }
