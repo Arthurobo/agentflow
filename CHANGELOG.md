@@ -5,6 +5,22 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.1]
+
+### Fixed
+
+- **Windows installer.** `install.ps1` referenced a nonexistent
+  `[Net.SecurityProtocol]` type instead of `[Net.SecurityProtocolType]`, so
+  `irm … | iex` aborted immediately on Windows PowerShell 5.1. TLS 1.2 is now set
+  defensively and the user PATH update is null-guarded.
+
+### Docs
+
+- **README documents Windows install** — the PowerShell one-liner
+  (`irm https://raw.githubusercontent.com/arthurobo/agentflow/main/install.ps1 | iex`),
+  the unsigned-binary SmartScreen note, the Scheduled-Task service, and Windows
+  in the platforms table.
+
 ## [0.6.0]
 
 ### Added
