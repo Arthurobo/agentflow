@@ -206,6 +206,16 @@ func (i *Installer) download(ctx context.Context, rel release, dest string) erro
 	if err := os.Chmod(binPath, 0o700); err != nil { //nolint:gosec // an executable only its owner can run
 		return err
 	}
+	// Close the downloaded handle before renaming: Windows refuses to rename a
+	// file still open in this process.
+	_ = asset.Close()
+	// A running cloudflared.exe cannot be overwritten by rename on Windows, but it
+	// can be moved aside; the running process keeps the old file open and the next
+	// launch uses the new one. (No-op elsewhere and when dest is absent.)
+	if runtime.GOOS == "windows" {
+		_ = os.Remove(dest + ".old")
+		_ = os.Rename(dest, dest+".old")
+	}
 	return os.Rename(binPath, dest)
 }
 

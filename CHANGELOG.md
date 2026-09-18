@@ -5,6 +5,17 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.4]
+
+### Fixed
+
+- **Windows: cloudflared download failed to replace a running/locked
+  `cloudflared.exe`** ("The process cannot access the file because it is being
+  used by another process"), so the tunnel never came up. The downloaded handle
+  is now closed before the rename (Windows won't rename an open file), and an
+  existing `cloudflared.exe` is moved aside before the new one is put in place —
+  the same move-aside pattern used for the self-updating agentflow binary.
+
 ## [0.6.3]
 
 ### Fixed
