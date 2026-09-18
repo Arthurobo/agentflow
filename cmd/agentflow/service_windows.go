@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/registry"
@@ -46,14 +47,35 @@ func (s *windowsRunKeyService) Install(ctx context.Context, spec serviceSpec) (b
 			return false, fmt.Errorf(`set autostart (HKCU\...\Run): %w`, err)
 		}
 	}
-	// Start the daemon now if it isn't already running. The single-instance lock
-	// makes a redundant launch exit immediately, so this is safe.
-	if !s.running(ctx) {
-		if err := launchDetached(spec.ExecPath); err != nil {
-			return changed, fmt.Errorf("launch agentflow serve: %w", err)
-		}
+	// `agentflow start` must run the CURRENT binary. The Run-key command line is
+	// the same path across versions, so `changed` can't tell us the binary was
+	// updated — always stop any running daemon (and its cloudflared child, via
+	// taskkill /T) and relaunch, so a fresh `start`/update takes effect instead
+	// of leaving the previous daemon running old code.
+	if s.running(ctx) {
+		_ = s.Stop(ctx)
+		waitForNoDaemon(ctx, s)
+	}
+	if err := launchDetached(spec.ExecPath); err != nil {
+		return changed, fmt.Errorf("launch agentflow serve: %w", err)
 	}
 	return changed, nil
+}
+
+// waitForNoDaemon waits briefly for killed daemons to actually exit, so the
+// relaunch doesn't collide with the old one over the single-instance lock or the
+// cloudflared binary.
+func waitForNoDaemon(ctx context.Context, s *windowsRunKeyService) {
+	for i := 0; i < 20; i++ {
+		if !s.running(ctx) {
+			return
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(250 * time.Millisecond):
+		}
+	}
 }
 
 func (s *windowsRunKeyService) Stop(ctx context.Context) error {

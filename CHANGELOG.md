@@ -5,6 +5,18 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.5]
+
+### Fixed
+
+- **Windows: `agentflow start` / update now restarts the daemon onto the new
+  binary.** Because the Run-key autostart command is the same path across
+  versions, `start` previously left the *previous* daemon running (old code) — so
+  a fix shipped in an update never took effect until a reboot, and the old daemon
+  kept holding `cloudflared.exe`. `start` now stops any running daemon (and its
+  cloudflared child, via `taskkill /T`), waits for it to exit, and relaunches the
+  current binary.
+
 ## [0.6.4]
 
 ### Fixed
