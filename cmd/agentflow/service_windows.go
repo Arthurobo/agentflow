@@ -5,134 +5,174 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
+	"os/exec"
+	"strconv"
 	"strings"
+	"syscall"
+
+	"golang.org/x/sys/windows"
+	"golang.org/x/sys/windows/registry"
 )
 
-// winTaskName is the Scheduled Task that runs the daemon.
-const winTaskName = "agentflow"
+// The daemon autostarts from the per-user Run key — no admin required (unlike a
+// Scheduled Task registered via Register-ScheduledTask, which needs elevation to
+// write the root task folder). It runs in the user's session, so child TUIs see
+// the user's profile and Claude/OpenCode auth. It stops at logout.
+const (
+	winRunKeyPath = `Software\Microsoft\Windows\CurrentVersion\Run`
+	winRunValue   = "agentflow"
+)
 
-// windowsTaskService runs the daemon as a per-user Scheduled Task that starts at
-// logon (schtasks). It needs no administrator rights and runs in the user's own
-// session, so the child TUIs see the user's profile and Claude/OpenCode auth.
-// The tradeoff versus a true Windows service is that it stops at logout
-// (StaysUpAfterLogout reports false so `start` can print a hint).
-type windowsTaskService struct {
+type windowsRunKeyService struct {
 	run runner
 }
 
-func newServiceManager() serviceManager { return &windowsTaskService{run: execRunner} }
+func newServiceManager() serviceManager { return &windowsRunKeyService{run: execRunner} }
 
-func (*windowsTaskService) Supported() bool { return true }
+func (*windowsRunKeyService) Supported() bool { return true }
 
-// psSingleQuote wraps s as a PowerShell single-quoted literal (internal single
-// quotes doubled), so a path is passed verbatim with no interpretation.
-func psSingleQuote(s string) string {
-	return "'" + strings.ReplaceAll(s, "'", "''") + "'"
-}
+// runCommandLine is the autostart command: `"<exe>" serve`.
+func runCommandLine(exe string) string { return fmt.Sprintf("%q serve", exe) }
 
-// createTask registers (or replaces) the logon task via PowerShell's
-// Register-ScheduledTask. Unlike `schtasks /Create /TR "..."`, the program and
-// its argument are separate parameters, so there is no fragile command-line
-// quoting to get wrong. -AllowStartIfOnBatteries / -DontStopIfGoingOnBatteries
-// matter on laptops, where tasks otherwise don't run on battery.
-func (s *windowsTaskService) createTask(ctx context.Context, exe string) error {
-	ps := "$ErrorActionPreference='Stop';" +
-		"$a=New-ScheduledTaskAction -Execute " + psSingleQuote(exe) + " -Argument 'serve';" +
-		"$t=New-ScheduledTaskTrigger -AtLogOn;" +
-		"$s=New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -ExecutionTimeLimit ([TimeSpan]::Zero);" +
-		"Register-ScheduledTask -TaskName '" + winTaskName + "' -Action $a -Trigger $t -Settings $s -Force | Out-Null"
-	out, err := s.run(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command", ps)
-	if err != nil {
-		return fmt.Errorf("%w: %s", err, strings.TrimSpace(out))
+func (s *windowsRunKeyService) Install(ctx context.Context, spec serviceSpec) (bool, error) {
+	desired := runCommandLine(spec.ExecPath)
+	changed := true
+	if cur, err := readRunValue(); err == nil {
+		changed = !strings.EqualFold(cur, desired)
 	}
-	return nil
-}
-
-func (s *windowsTaskService) Install(ctx context.Context, spec serviceSpec) (bool, error) {
-	prev, hadPrev := s.currentTaskCommand(ctx)
-	changed := !hadPrev || !strings.Contains(prev, spec.ExecPath)
-	if err := s.createTask(ctx, spec.ExecPath); err != nil {
-		return false, fmt.Errorf("register scheduled task: %w", err)
-	}
-	// A freshly (re)registered logon task is not running yet: start it now so the
-	// daemon (and the tunnel) come up without waiting for the next logon. If it
-	// was already running and the binary path changed, restart onto the new one.
-	st := s.Query(ctx)
-	if !st.Running {
-		if _, err := s.run(ctx, "schtasks", "/Run", "/TN", winTaskName); err != nil {
-			return changed, fmt.Errorf("schtasks /Run: %w", err)
+	if changed {
+		if err := writeRunValue(desired); err != nil {
+			return false, fmt.Errorf(`set autostart (HKCU\...\Run): %w`, err)
 		}
-	} else if changed {
-		_ = s.Restart(ctx)
+	}
+	// Start the daemon now if it isn't already running. The single-instance lock
+	// makes a redundant launch exit immediately, so this is safe.
+	if !s.running(ctx) {
+		if err := launchDetached(spec.ExecPath); err != nil {
+			return changed, fmt.Errorf("launch agentflow serve: %w", err)
+		}
 	}
 	return changed, nil
 }
 
-func (s *windowsTaskService) Stop(ctx context.Context) error {
-	_, err := s.run(ctx, "schtasks", "/End", "/TN", winTaskName)
-	return err
-}
-
-func (s *windowsTaskService) Restart(ctx context.Context) error {
-	_, _ = s.run(ctx, "schtasks", "/End", "/TN", winTaskName)
-	_, err := s.run(ctx, "schtasks", "/Run", "/TN", winTaskName)
-	return err
-}
-
-func (s *windowsTaskService) Remove(ctx context.Context) error {
-	_, _ = s.run(ctx, "schtasks", "/End", "/TN", winTaskName)
-	_, err := s.run(ctx, "schtasks", "/Delete", "/TN", winTaskName, "/F")
-	return err
-}
-
-func (s *windowsTaskService) Query(ctx context.Context) serviceState {
-	out, err := s.run(ctx, "schtasks", "/Query", "/TN", winTaskName, "/FO", "LIST", "/V")
-	if err != nil {
-		return serviceState{}
+func (s *windowsRunKeyService) Stop(ctx context.Context) error {
+	for _, pid := range s.daemonPIDs(ctx) {
+		//nolint:gosec // pid came from tasklist for our own image.
+		_, _ = s.run(ctx, "taskkill", "/PID", strconv.Itoa(pid), "/T", "/F")
 	}
-	st := serviceState{Installed: true}
-	for _, line := range strings.Split(out, "\n") {
-		key, val, ok := strings.Cut(line, ":")
-		if !ok {
-			continue
-		}
-		switch strings.TrimSpace(key) {
-		case "Status":
-			if strings.EqualFold(strings.TrimSpace(val), "Running") {
-				st.Running = true
-			}
-		case "Scheduled Task State":
-			if strings.EqualFold(strings.TrimSpace(val), "Enabled") {
-				st.Enabled = true
-			}
-		}
+	return nil
+}
+
+func (s *windowsRunKeyService) Restart(ctx context.Context) error {
+	_ = s.Stop(ctx)
+	exe, err := resolveExecutable()
+	if err != nil {
+		return err
+	}
+	return launchDetached(exe)
+}
+
+func (s *windowsRunKeyService) Remove(ctx context.Context) error {
+	_ = s.Stop(ctx)
+	return deleteRunValue()
+}
+
+func (s *windowsRunKeyService) Query(ctx context.Context) serviceState {
+	st := serviceState{}
+	if _, err := readRunValue(); err == nil {
+		st.Installed = true
+	}
+	if pids := s.daemonPIDs(ctx); len(pids) > 0 {
+		st.Running = true
+		st.PID = pids[0]
 	}
 	return st
 }
 
-// currentTaskCommand returns the command the installed task runs, if any.
-func (s *windowsTaskService) currentTaskCommand(ctx context.Context) (string, bool) {
-	out, err := s.run(ctx, "schtasks", "/Query", "/TN", winTaskName, "/FO", "LIST", "/V")
+// ServicePATH returns "" — the daemon inherits the user's environment PATH,
+// which is where npm/nvm put claude and opencode.
+func (*windowsRunKeyService) ServicePATH() string { return "" }
+
+func (*windowsRunKeyService) LogHint() string {
+	return "agentflow autostarts from your user Run key; run `agentflow serve` in a terminal to watch live logs"
+}
+
+// StaysUpAfterLogout reports false: a per-user autostart stops at logout.
+func (*windowsRunKeyService) StaysUpAfterLogout(context.Context) bool { return false }
+
+func (s *windowsRunKeyService) running(ctx context.Context) bool {
+	return len(s.daemonPIDs(ctx)) > 0
+}
+
+// daemonPIDs returns running agentflow.exe PIDs other than this process (which
+// is itself agentflow.exe when a CLI command is running).
+func (s *windowsRunKeyService) daemonPIDs(ctx context.Context) []int {
+	out, err := s.run(ctx, "tasklist", "/FO", "CSV", "/NH", "/FI", "IMAGENAME eq agentflow.exe")
 	if err != nil {
-		return "", false
+		return nil
 	}
+	self := os.Getpid()
+	var pids []int
 	for _, line := range strings.Split(out, "\n") {
-		key, val, ok := strings.Cut(line, ":")
-		if ok && strings.TrimSpace(key) == "Task To Run" {
-			return strings.TrimSpace(val), true
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(strings.ToLower(line), `"agentflow.exe"`) {
+			continue
 		}
+		fields := strings.Split(line, ",")
+		if len(fields) < 2 {
+			continue
+		}
+		pid, err := strconv.Atoi(strings.Trim(fields[1], `" `))
+		if err != nil || pid == self {
+			continue
+		}
+		pids = append(pids, pid)
 	}
-	return "", false
+	return pids
 }
 
-// ServicePATH returns "" — the task inherits the user's environment PATH at
-// logon, which is where npm/nvm put claude and opencode.
-func (*windowsTaskService) ServicePATH() string { return "" }
-
-func (*windowsTaskService) LogHint() string {
-	return "the \"agentflow\" task runs `agentflow serve` at logon (see Task Scheduler / taskschd.msc); run `agentflow serve` in a terminal to watch live logs"
+// launchDetached starts `agentflow serve` as a background process with no
+// console window, surviving the CLI's exit.
+func launchDetached(exe string) error {
+	//nolint:gosec // G204: our own binary.
+	cmd := exec.Command(exe, "serve")
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		CreationFlags: windows.DETACHED_PROCESS | windows.CREATE_NEW_PROCESS_GROUP,
+	}
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	return cmd.Process.Release() // the daemon runs independently
 }
 
-// StaysUpAfterLogout reports false: a per-user logon task stops when the user
-// logs out.
-func (*windowsTaskService) StaysUpAfterLogout(context.Context) bool { return false }
+func readRunValue() (string, error) {
+	k, err := registry.OpenKey(registry.CURRENT_USER, winRunKeyPath, registry.QUERY_VALUE)
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = k.Close() }()
+	v, _, err := k.GetStringValue(winRunValue)
+	return v, err
+}
+
+func writeRunValue(cmdline string) error {
+	k, _, err := registry.CreateKey(registry.CURRENT_USER, winRunKeyPath, registry.SET_VALUE)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = k.Close() }()
+	return k.SetStringValue(winRunValue, cmdline)
+}
+
+func deleteRunValue() error {
+	k, err := registry.OpenKey(registry.CURRENT_USER, winRunKeyPath, registry.SET_VALUE)
+	if err != nil {
+		return nil // key absent — nothing to remove
+	}
+	defer func() { _ = k.Close() }()
+	if err := k.DeleteValue(winRunValue); err != nil && err != registry.ErrNotExist {
+		return err
+	}
+	return nil
+}

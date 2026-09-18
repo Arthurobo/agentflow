@@ -5,6 +5,19 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.3]
+
+### Fixed
+
+- **Windows `agentflow start` failed with `Register-ScheduledTask: Access is
+  denied` (0x80070005)** — the PowerShell Task Scheduler cmdlet needs
+  elevation to register a task in the root folder. The daemon now autostarts
+  from the per-user **Run key** (`HKCU\…\CurrentVersion\Run`), which needs no
+  admin, and `start` launches the daemon immediately as a detached background
+  process — so the tunnel comes up and the Cloudflare URL is printed without
+  elevation. (Known cosmetic follow-up: a console window may appear at logon;
+  the immediate `start` launch is windowless.)
+
 ## [0.6.2]
 
 ### Fixed
