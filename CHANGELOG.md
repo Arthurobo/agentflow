@@ -5,6 +5,19 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.6]
+
+### Fixed
+
+- **First-time tunnel provisioning could time out** with "context deadline
+  exceeded" on the account service's `/v1/provision` call — the client capped
+  every request at 10s, but the *first* provision for a new machine creates a
+  Cloudflare named tunnel + DNS server-side, which can take longer than that
+  (especially over a slower network path). The cloud client no longer imposes a
+  client-wide 10s cap; it applies the 10s budget per call by default and gives
+  **provisioning a 45s budget**. Remote access already retried on its own
+  schedule, so this mainly removes the failed first attempt.
+
 ## [0.6.5]
 
 ### Fixed

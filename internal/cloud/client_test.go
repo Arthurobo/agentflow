@@ -139,8 +139,10 @@ func TestNewClientRefusesPlainHTTPToRemoteHosts(t *testing.T) {
 			t.Errorf("%q refused: %v", base, err)
 		}
 	}
-	if c := NewClient("").(*httpClient); c.base != DefaultBaseURL || c.http.Timeout != requestTimeout {
-		t.Errorf("default client base %q timeout %s", c.base, c.http.Timeout)
+	// The client has no client-wide Timeout; do() applies the per-call budget
+	// so slow calls (provisioning) can ask for a longer deadline.
+	if c := NewClient("").(*httpClient); c.base != DefaultBaseURL || c.http.Timeout != 0 {
+		t.Errorf("default client base %q timeout %s (want no client-wide timeout)", c.base, c.http.Timeout)
 	}
 }
 

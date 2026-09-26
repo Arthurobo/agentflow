@@ -12,7 +12,15 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 )
+
+// provisionTimeout is longer than the default request budget: the FIRST
+// provision for a new machine creates a Cloudflare named tunnel and DNS record
+// on the server, which can take well over the default 10s. The daemon retries
+// on its own schedule, but a too-tight cap made the first attempt always fail
+// ("context deadline exceeded") on slower network paths.
+const provisionTimeout = 45 * time.Second
 
 // A Cloudflare tunnel for this machine comes from the account service: the
 // daemon sends its machine id, its hostname and a secret it generated, and
@@ -59,6 +67,10 @@ func (c *httpClient) ProvisionTunnel(ctx context.Context, machineID, hostname, s
 		TunnelToken string `json:"tunnelToken"`
 		Transport   string `json:"transport"`
 	}
+	// First-time provisioning creates a tunnel + DNS on the server; give it a
+	// longer budget than the default per-call timeout.
+	ctx, cancel := context.WithTimeout(ctx, provisionTimeout)
+	defer cancel()
 	body := map[string]string{"machineId": machineID, "hostname": hostname, "provisionSecret": secret}
 	if err := c.do(ctx, "POST", "/v1/provision", "", body, &resp); err != nil {
 		var apiErr *APIError

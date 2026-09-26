@@ -64,7 +64,9 @@ func (e *APIError) Is(target error) bool {
 	return false
 }
 
-// requestTimeout bounds each call; the daemon retries on its own schedule.
+// requestTimeout is the default per-call budget; the daemon retries on its own
+// schedule. It is applied per request in do() (not as a client-wide cap) so a
+// slow call like first-time tunnel provisioning can ask for a longer deadline.
 const requestTimeout = 10 * time.Second
 
 type httpClient struct {
@@ -83,7 +85,9 @@ func NewClient(baseURL string) Client {
 	if base == "" {
 		base = DefaultBaseURL
 	}
-	return &httpClient{base: base, baseErr: checkBaseURL(base), http: &http.Client{Timeout: requestTimeout}}
+	// No client-wide Timeout: do() applies a per-call deadline instead, so a
+	// caller (e.g. provisioning) can request a longer budget than the default.
+	return &httpClient{base: base, baseErr: checkBaseURL(base), http: &http.Client{}}
 }
 
 func checkBaseURL(base string) error {
@@ -151,6 +155,13 @@ const maxResponse = 64 << 10
 func (c *httpClient) do(ctx context.Context, method, path, token string, body, out any) error {
 	if c.baseErr != nil {
 		return c.baseErr
+	}
+	// Apply the default per-call budget unless the caller already set a deadline
+	// (provisioning asks for a longer one).
+	if _, ok := ctx.Deadline(); !ok {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, requestTimeout)
+		defer cancel()
 	}
 	var rd io.Reader
 	if body != nil {
