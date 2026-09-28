@@ -13,7 +13,7 @@ require (
 	golang.org/x/sys v0.48.0
 	gopkg.in/yaml.v3 v3.0.1
 	modernc.org/sqlite v1.57.0
-	tailscale.com v1.102.4
+	tailscale.com v1.102.5
 )
 
 require (
